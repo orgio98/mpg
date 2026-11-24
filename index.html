@@ -144,7 +144,6 @@
       overflow: visible;
     }
 
-    /* 비활성 선택 구간들 */
     .timeline-ghost-range {
       position: absolute;
       top: 0;
@@ -156,7 +155,6 @@
       z-index: 1;
     }
 
-    /* 현재 편집 중인 활성 선택 구간 */
     .timeline-range {
       position: absolute;
       top: -1px;
@@ -231,7 +229,7 @@
       font-variant-numeric: tabular-nums;
     }
 
-    /* ===== 선택 구간(멀티 세그먼트) 리스트 ===== */
+    /* ===== 선택 구간 리스트 ===== */
     .ranges-panel {
       margin-top: 12px;
       background: var(--panel-alt);
@@ -659,7 +657,6 @@
     let ffmpeg = null;
     let ffmpegLoaded = false;
 
-    // clip 구조: { id, file, name, url, duration, width, height, ranges: [{ id, start, end }], activeRangeId }
     let clips = [];
     let selectedClipId = null;
     let previewStopHandler = null;
@@ -740,12 +737,10 @@
       return clip.ranges.reduce((acc, r) => acc + Math.max(0, r.end - r.start), 0);
     }
 
-    // 타임라인 트랙의 고스트(비활성) 구간 + 활성 구간 + 핸들 동기화
     function syncTimelineUI() {
       const clip = getSelectedClip();
       const activeRange = getActiveRange(clip);
 
-      // 기존 고스트 구간 엘리먼트 제거
       el.timelineTrack.querySelectorAll('.timeline-ghost-range').forEach(n => n.remove());
 
       if (!clip || clip.duration <= 0 || !activeRange) {
@@ -765,7 +760,6 @@
 
       el.timelineBox.classList.remove('disabled');
 
-      // 다른 선택 구간들을 배경에 표시
       clip.ranges.forEach(r => {
         if (r.id === activeRange.id) return;
         const gStart = (r.start / clip.duration) * 100;
@@ -947,10 +941,11 @@
       });
     }
 
+    // Cross-Origin Worker 차단을 피하기 위해 Worker, Core, Wasm 모두 Blob URL로 로드
     async function ensureFFmpeg() {
       if (ffmpegLoaded) return;
       el.engineStatus.textContent = 'FFmpeg 코어 다운로드 중...';
-      appendLog('[시스템] FFmpeg WebAssembly 코어를 불러오는 중입니다 (최초 1회 약 25MB)...');
+      appendLog('[시스템] FFmpeg Worker 및 WebAssembly 코어를 불러오는 중입니다 (최초 1회 약 25MB)...');
 
       ffmpeg = new FFmpeg();
       ffmpeg.on('log', ({ message }) => appendLog(message));
@@ -960,10 +955,13 @@
         }
       });
 
-      const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+      const ffmpegBase = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd';
+      const coreBase = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+
       await ffmpeg.load({
-        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm')
+        classWorkerURL: await toBlobURL(`${ffmpegBase}/814.ffmpeg.js`, 'text/javascript'),
+        coreURL: await toBlobURL(`${coreBase}/ffmpeg-core.js`, 'text/javascript'),
+        wasmURL: await toBlobURL(`${coreBase}/ffmpeg-core.wasm`, 'application/wasm')
       });
 
       ffmpegLoaded = true;
@@ -1169,7 +1167,6 @@
       el.exportAllRangesBtn.disabled = busy || clips.length === 0;
     }
 
-    // (clip, range) 작업 목록을 받아 순차 컷 후 하나로 병합
     async function processTasks(tasks, outputFilename) {
       if (!tasks.length) return;
       setBusy(true);
@@ -1186,7 +1183,6 @@
         const baseW = firstClip.width % 2 === 0 ? firstClip.width : firstClip.width - 1;
         const baseH = firstClip.height % 2 === 0 ? firstClip.height : firstClip.height - 1;
 
-        // 동일 원본 파일은 한 번만 writeFile하도록 캐싱
         const writtenInputs = new Map();
 
         for (let i = 0; i < tasks.length; i++) {
@@ -1233,7 +1229,6 @@
           segmentNames.push(segName);
         }
 
-        // 원본 입력 파일 정리
         for (const inName of writtenInputs.values()) {
           await ffmpeg.deleteFile(inName);
         }
@@ -1298,7 +1293,6 @@
       }[m]));
     }
 
-    // 이벤트 바인딩
     setupTimelineDrag();
 
     el.dropzone.onclick = () => el.fileInput.click();
