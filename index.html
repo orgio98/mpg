@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MP4 Studio Lite — 브라우저 MP4 자르기 & 붙이기</title>
+  <title>MP4 Studio Lite — 다중 구간 자르기 &amp; 선택 구간 합치기</title>
   <style>
     :root {
       --bg: #0f172a;
@@ -28,7 +28,7 @@
     }
 
     .container {
-      max-width: 1120px;
+      max-width: 1160px;
       margin: 0 auto;
       padding: 24px 16px 48px;
     }
@@ -65,7 +65,7 @@
       gap: 20px;
     }
 
-    @media (max-width: 860px) {
+    @media (max-width: 900px) {
       .grid { grid-template-columns: 1fr; }
     }
 
@@ -82,11 +82,12 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 8px;
     }
 
     video {
       width: 100%;
-      max-height: 350px;
+      max-height: 340px;
       background: #000;
       border-radius: 8px;
       border: 1px solid var(--border);
@@ -115,6 +116,8 @@
       font-size: 0.8rem;
       color: var(--muted);
       margin-bottom: 10px;
+      gap: 8px;
+      flex-wrap: wrap;
     }
 
     .timeline-header strong {
@@ -141,22 +144,34 @@
       overflow: visible;
     }
 
-    /* 선택된 구간 하이라이트 (드래그로 통째 이동 가능) */
+    /* 비활성 선택 구간들 */
+    .timeline-ghost-range {
+      position: absolute;
+      top: 0;
+      height: 12px;
+      background: rgba(148, 163, 184, 0.28);
+      border-top: 1px dashed #94a3b8;
+      border-bottom: 1px dashed #94a3b8;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* 현재 편집 중인 활성 선택 구간 */
     .timeline-range {
       position: absolute;
       top: -1px;
       height: 14px;
-      background: linear-gradient(90deg, rgba(59, 130, 246, 0.42), rgba(16, 185, 129, 0.42));
+      background: linear-gradient(90deg, rgba(59, 130, 246, 0.48), rgba(16, 185, 129, 0.48));
       border-top: 2px solid #60a5fa;
       border-bottom: 2px solid #34d399;
       cursor: grab;
+      z-index: 2;
     }
 
     .timeline-range:active {
       cursor: grabbing;
     }
 
-    /* 현재 재생 위치 (Playhead) */
     .timeline-playhead {
       position: absolute;
       top: -6px;
@@ -165,10 +180,9 @@
       background: #f43f5e;
       pointer-events: none;
       transform: translateX(-50%);
-      z-index: 2;
+      z-index: 4;
     }
 
-    /* 시작 / 종료 드래그 핸들 */
     .timeline-handle {
       position: absolute;
       top: 50%;
@@ -177,7 +191,7 @@
       transform: translate(-50%, -50%);
       border-radius: 5px;
       cursor: ew-resize;
-      z-index: 3;
+      z-index: 5;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -216,7 +230,72 @@
       margin-top: 4px;
       font-variant-numeric: tabular-nums;
     }
-    /* ==================================== */
+
+    /* ===== 선택 구간(멀티 세그먼트) 리스트 ===== */
+    .ranges-panel {
+      margin-top: 12px;
+      background: var(--panel-alt);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+    }
+
+    .ranges-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+
+    .ranges-head-title {
+      font-size: 0.86rem;
+      font-weight: 600;
+    }
+
+    .range-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 170px;
+      overflow-y: auto;
+    }
+
+    .range-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      border-radius: 7px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+
+    .range-item.active {
+      border-color: var(--accent);
+      background: rgba(16, 185, 129, 0.12);
+    }
+
+    .range-item-info {
+      font-variant-numeric: tabular-nums;
+    }
+
+    .range-item-actions {
+      display: flex;
+      gap: 4px;
+    }
+
+    .range-item-actions button {
+      padding: 3px 7px;
+      font-size: 0.74rem;
+    }
 
     .trim-controls {
       margin-top: 10px;
@@ -322,7 +401,7 @@
       display: flex;
       flex-direction: column;
       gap: 8px;
-      max-height: 430px;
+      max-height: 490px;
       overflow-y: auto;
     }
 
@@ -372,7 +451,7 @@
     }
 
     .export-bar {
-      margin-top: 20px;
+      margin-top: 12px;
       display: flex;
       flex-wrap: wrap;
       gap: 12px;
@@ -441,16 +520,16 @@
     <header>
       <div>
         <h1>🎬 MP4 Studio Lite</h1>
-        <div class="hint">서버 업로드 없이 브라우저에서 직접 MP4 자르기 · 순서 변경 · 붙이기</div>
+        <div class="hint">다중 선택 구간 지정 · 구간별/클립별 순서 조정 · 선택한 구간만 하나로 병합</div>
       </div>
       <span class="badge" id="engineStatus">FFmpeg 엔진 대기 중</span>
     </header>
 
     <div class="grid">
-      <!-- 왼쪽: 미리보기 및 타임라인 슬라이더 -->
+      <!-- 왼쪽: 미리보기, 타임라인 슬라이더 및 다중 선택 구간 목록 -->
       <section class="card">
         <h2>
-          <span>미리보기 &amp; 구간 자르기</span>
+          <span>미리보기 &amp; 선택 구간 편집</span>
           <span id="currentClipLabel" style="font-size:0.82rem; color:var(--muted);">선택된 클립 없음</span>
         </h2>
 
@@ -459,14 +538,14 @@
         <!-- 듀얼 핸들 타임라인 구간 슬라이더 -->
         <div class="timeline-box disabled" id="timelineBox">
           <div class="timeline-header">
-            <span>선택 구간: <strong id="rangeSummary">00:00.0 ~ 00:00.0</strong></span>
-            <span>길이: <strong id="rangeDuration">0.0초</strong></span>
+            <span>활성 구간: <strong id="rangeSummary">00:00.0 ~ 00:00.0</strong></span>
+            <span>활성 길이: <strong id="rangeDuration">0.0초</strong></span>
           </div>
 
           <div class="timeline-track-wrap" id="timelineWrap">
             <div class="timeline-track" id="timelineTrack">
-              <div class="timeline-range" id="timelineRange"></div>
               <div class="timeline-playhead" id="timelinePlayhead" style="left:0%;"></div>
+              <div class="timeline-range" id="timelineRange"></div>
               <div class="timeline-handle handle-start" id="handleStart" title="시작 지점 드래그" style="left:0%;"></div>
               <div class="timeline-handle handle-end" id="handleEnd" title="종료 지점 드래그" style="left:100%;"></div>
             </div>
@@ -479,9 +558,21 @@
           </div>
         </div>
 
+        <!-- 다중 선택 구간 관리 -->
+        <div class="ranges-panel">
+          <div class="ranges-head">
+            <span class="ranges-head-title">이 클립의 선택 구간 (<span id="rangeCount">0</span>개)</span>
+            <div style="display:flex; gap:6px;">
+              <button type="button" id="addRangeBtn" class="primary" disabled>+ 새 구간 추가</button>
+              <button type="button" id="resetRangeBtn" disabled>활성 구간 초기화</button>
+            </div>
+          </div>
+          <ul class="range-list" id="rangeList"></ul>
+        </div>
+
         <div class="trim-controls">
           <div class="field">
-            <label for="startTime">시작 시간 (초)</label>
+            <label for="startTime">활성 구간 시작 (초)</label>
             <div class="input-row">
               <input type="number" id="startTime" step="0.1" min="0" value="0" disabled />
               <button type="button" id="setStartBtn" disabled>현재 위치</button>
@@ -489,7 +580,7 @@
           </div>
 
           <div class="field">
-            <label for="endTime">종료 시간 (초)</label>
+            <label for="endTime">활성 구간 종료 (초)</label>
             <div class="input-row">
               <input type="number" id="endTime" step="0.1" min="0" value="0" disabled />
               <button type="button" id="setEndBtn" disabled>현재 위치</button>
@@ -498,18 +589,17 @@
         </div>
 
         <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
-          <button type="button" id="previewTrimBtn" disabled>▶ 선택 구간 미리보기</button>
-          <button type="button" id="resetTrimBtn" disabled>구간 초기화</button>
+          <button type="button" id="previewTrimBtn" disabled>▶ 활성 구간 미리보기</button>
         </div>
         <div class="hint">
-          • 파란색(시작)/초록색(종료) 핸들을 드래그하거나, 가운데 선택 바를 드래그해 구간을 통째로 이동할 수 있습니다.
+          • 여러 구간을 만든 뒤 위/아래 버튼으로 순서를 바꾸면, 합쳐지는 순서도 그에 맞춰 결정됩니다.
         </div>
       </section>
 
       <!-- 오른쪽: 클립 목록 & 순서 편집 -->
       <section class="card">
         <h2>
-          <span>클립 타임라인 (<span id="clipCount">0</span>개)</span>
+          <span>클립 목록 (<span id="clipCount">0</span>개)</span>
           <button type="button" id="clearAllBtn" class="danger" disabled>전체 비우기</button>
         </h2>
 
@@ -523,9 +613,9 @@
       </section>
     </div>
 
-    <!-- 하단: 내보내기 설정 및 실행 -->
+    <!-- 하단: 선택 구간 병합 및 내보내기 -->
     <section class="card" style="margin-top:20px;">
-      <h2>내보내기 (자르기 / 붙이기 실행)</h2>
+      <h2>선택 구간 합치기 및 내보내기</h2>
       <div class="export-bar">
         <div class="mode-group">
           <label for="encodeMode" style="font-size:0.88rem; color:var(--muted);">처리 방식:</label>
@@ -535,23 +625,23 @@
           </select>
         </div>
 
-        <div style="display:flex; gap:8px;">
-          <button type="button" id="exportSingleBtn" disabled>선택 클립만 자르기</button>
-          <button type="button" id="exportMergeBtn" class="primary" disabled>전체 클립 자르고 붙이기</button>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button type="button" id="exportClipRangesBtn" disabled>선택 클립의 구간들만 합치기</button>
+          <button type="button" id="exportAllRangesBtn" class="primary" disabled>전체 클립의 선택 구간 합치기</button>
         </div>
       </div>
 
       <div class="progress-wrap">
         <progress id="progressBar" value="0" max="100"></progress>
-        <div class="log-box" id="logBox">준비 완료. MP4 파일을 추가한 뒤 작업을 실행하세요.</div>
+        <div class="log-box" id="logBox">준비 완료. MP4 파일을 추가하고 원하는 구간들을 지정해 보세요.</div>
       </div>
 
       <div class="result-box" id="resultBox">
         <div>
-          <strong style="color:#6ee7b7;">✔ 작업이 완료되었습니다!</strong>
+          <strong style="color:#6ee7b7;">✔ 선택 구간 병합이 완료되었습니다!</strong>
           <div id="resultInfo" style="font-size:0.82rem; color:var(--muted);"></div>
         </div>
-        <a id="downloadLink" download="edited_output.mp4" style="text-decoration:none;">
+        <a id="downloadLink" download="selected_ranges_merged.mp4" style="text-decoration:none;">
           <button type="button" class="accent">⬇ 결과 MP4 다운로드</button>
         </a>
       </div>
@@ -568,13 +658,13 @@
 
     let ffmpeg = null;
     let ffmpegLoaded = false;
+
+    // clip 구조: { id, file, name, url, duration, width, height, ranges: [{ id, start, end }], activeRangeId }
     let clips = [];
-    let selectedId = null;
+    let selectedClipId = null;
     let previewStopHandler = null;
     let lastOutputUrl = null;
-
-    // 타임라인 드래그 상태
-    let dragState = null; // { type: 'start' | 'end' | 'range', startX, initStart, initEnd }
+    let dragState = null;
 
     const el = {
       engineStatus: document.getElementById('engineStatus'),
@@ -597,21 +687,28 @@
       tickStart: document.getElementById('tickStart'),
       tickMid: document.getElementById('tickMid'),
       tickEnd: document.getElementById('tickEnd'),
+      rangeCount: document.getElementById('rangeCount'),
+      addRangeBtn: document.getElementById('addRangeBtn'),
+      resetRangeBtn: document.getElementById('resetRangeBtn'),
+      rangeList: document.getElementById('rangeList'),
       startTime: document.getElementById('startTime'),
       endTime: document.getElementById('endTime'),
       setStartBtn: document.getElementById('setStartBtn'),
       setEndBtn: document.getElementById('setEndBtn'),
       previewTrimBtn: document.getElementById('previewTrimBtn'),
-      resetTrimBtn: document.getElementById('resetTrimBtn'),
       encodeMode: document.getElementById('encodeMode'),
-      exportSingleBtn: document.getElementById('exportSingleBtn'),
-      exportMergeBtn: document.getElementById('exportMergeBtn'),
+      exportClipRangesBtn: document.getElementById('exportClipRangesBtn'),
+      exportAllRangesBtn: document.getElementById('exportAllRangesBtn'),
       progressBar: document.getElementById('progressBar'),
       logBox: document.getElementById('logBox'),
       resultBox: document.getElementById('resultBox'),
       resultInfo: document.getElementById('resultInfo'),
       downloadLink: document.getElementById('downloadLink')
     };
+
+    function uid() {
+      return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+    }
 
     function appendLog(msg) {
       el.logBox.textContent += `\n${msg}`;
@@ -629,10 +726,29 @@
       return `${String(m).padStart(2, '0')}:${s}`;
     }
 
-    // 타임라인 슬라이더 UI 동기화
+    function getSelectedClip() {
+      return clips.find(c => c.id === selectedClipId) || null;
+    }
+
+    function getActiveRange(clip) {
+      if (!clip || !clip.ranges.length) return null;
+      return clip.ranges.find(r => r.id === clip.activeRangeId) || clip.ranges[0];
+    }
+
+    function getTotalSelectedDuration(clip) {
+      if (!clip) return 0;
+      return clip.ranges.reduce((acc, r) => acc + Math.max(0, r.end - r.start), 0);
+    }
+
+    // 타임라인 트랙의 고스트(비활성) 구간 + 활성 구간 + 핸들 동기화
     function syncTimelineUI() {
-      const clip = clips.find(c => c.id === selectedId);
-      if (!clip || clip.duration <= 0) {
+      const clip = getSelectedClip();
+      const activeRange = getActiveRange(clip);
+
+      // 기존 고스트 구간 엘리먼트 제거
+      el.timelineTrack.querySelectorAll('.timeline-ghost-range').forEach(n => n.remove());
+
+      if (!clip || clip.duration <= 0 || !activeRange) {
         el.timelineBox.classList.add('disabled');
         el.rangeSummary.textContent = '00:00.0 ~ 00:00.0';
         el.rangeDuration.textContent = '0.0초';
@@ -648,16 +764,29 @@
       }
 
       el.timelineBox.classList.remove('disabled');
-      const startPct = (clip.start / clip.duration) * 100;
-      const endPct = (clip.end / clip.duration) * 100;
+
+      // 다른 선택 구간들을 배경에 표시
+      clip.ranges.forEach(r => {
+        if (r.id === activeRange.id) return;
+        const gStart = (r.start / clip.duration) * 100;
+        const gWidth = Math.max(0.5, ((r.end - r.start) / clip.duration) * 100);
+        const ghost = document.createElement('div');
+        ghost.className = 'timeline-ghost-range';
+        ghost.style.left = `${gStart}%`;
+        ghost.style.width = `${gWidth}%`;
+        el.timelineTrack.appendChild(ghost);
+      });
+
+      const startPct = (activeRange.start / clip.duration) * 100;
+      const endPct = (activeRange.end / clip.duration) * 100;
 
       el.handleStart.style.left = `${startPct}%`;
       el.handleEnd.style.left = `${endPct}%`;
       el.timelineRange.style.left = `${startPct}%`;
       el.timelineRange.style.width = `${Math.max(0, endPct - startPct)}%`;
 
-      el.rangeSummary.textContent = `${formatTime(clip.start)} ~ ${formatTime(clip.end)}`;
-      el.rangeDuration.textContent = `${Math.max(0, clip.end - clip.start).toFixed(1)}초`;
+      el.rangeSummary.textContent = `${formatTime(activeRange.start)} ~ ${formatTime(activeRange.end)}`;
+      el.rangeDuration.textContent = `${Math.max(0, activeRange.end - activeRange.start).toFixed(1)}초`;
 
       el.tickStart.textContent = formatTime(0);
       el.tickMid.textContent = formatTime(clip.duration / 2);
@@ -667,19 +796,87 @@
       el.timelinePlayhead.style.left = `${playPct}%`;
     }
 
-    // 타임라인 드래그 이벤트 설정
+    function renderRanges() {
+      const clip = getSelectedClip();
+      el.rangeList.innerHTML = '';
+
+      if (!clip) {
+        el.rangeCount.textContent = '0';
+        return;
+      }
+
+      el.rangeCount.textContent = clip.ranges.length;
+
+      clip.ranges.forEach((r, idx) => {
+        const li = document.createElement('li');
+        const isActive = r.id === clip.activeRangeId;
+        li.className = `range-item ${isActive ? 'active' : ''}`;
+        li.onclick = () => {
+          clip.activeRangeId = r.id;
+          el.startTime.value = r.start;
+          el.endTime.value = r.end;
+          el.previewVideo.currentTime = r.start;
+          syncTimelineUI();
+          renderRanges();
+        };
+
+        const dur = Math.max(0, r.end - r.start).toFixed(1);
+        li.innerHTML = `
+          <div class="range-item-info">
+            <strong>구간 #${idx + 1}</strong> · ${formatTime(r.start)} ~ ${formatTime(r.end)} (${dur}초)
+          </div>
+          <div class="range-item-actions" onclick="event.stopPropagation()">
+            <button type="button" title="위로" ${idx === 0 ? 'disabled' : ''} data-act="up">▲</button>
+            <button type="button" title="아래로" ${idx === clip.ranges.length - 1 ? 'disabled' : ''} data-act="down">▼</button>
+            <button type="button" class="danger" title="삭제" ${clip.ranges.length <= 1 ? 'disabled' : ''} data-act="del">✕</button>
+          </div>
+        `;
+
+        li.querySelector('[data-act="up"]').onclick = () => {
+          const [item] = clip.ranges.splice(idx, 1);
+          clip.ranges.splice(idx - 1, 0, item);
+          renderRanges();
+          renderClips();
+        };
+
+        li.querySelector('[data-act="down"]').onclick = () => {
+          const [item] = clip.ranges.splice(idx, 1);
+          clip.ranges.splice(idx + 1, 0, item);
+          renderRanges();
+          renderClips();
+        };
+
+        li.querySelector('[data-act="del"]').onclick = () => {
+          if (clip.ranges.length <= 1) return;
+          clip.ranges.splice(idx, 1);
+          if (clip.activeRangeId === r.id) {
+            clip.activeRangeId = clip.ranges[0].id;
+            const nextR = getActiveRange(clip);
+            el.startTime.value = nextR.start;
+            el.endTime.value = nextR.end;
+          }
+          syncTimelineUI();
+          renderRanges();
+          renderClips();
+        };
+
+        el.rangeList.appendChild(li);
+      });
+    }
+
     function setupTimelineDrag() {
       const startDrag = (type, e) => {
-        const clip = clips.find(c => c.id === selectedId);
-        if (!clip) return;
+        const clip = getSelectedClip();
+        const range = getActiveRange(clip);
+        if (!clip || !range) return;
         e.stopPropagation();
         e.preventDefault();
 
         dragState = {
           type,
           startX: e.clientX,
-          initStart: clip.start,
-          initEnd: clip.end
+          initStart: range.start,
+          initEnd: range.end
         };
 
         if (type === 'start') el.handleStart.classList.add('dragging');
@@ -690,10 +887,9 @@
       el.handleEnd.addEventListener('pointerdown', e => startDrag('end', e));
       el.timelineRange.addEventListener('pointerdown', e => startDrag('range', e));
 
-      // 트랙 빈 공간 클릭 시 해당 위치로 재생 헤드 이동
       el.timelineWrap.addEventListener('pointerdown', e => {
         if (dragState) return;
-        const clip = clips.find(c => c.id === selectedId);
+        const clip = getSelectedClip();
         if (!clip) return;
         const rect = el.timelineTrack.getBoundingClientRect();
         const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
@@ -703,34 +899,36 @@
 
       window.addEventListener('pointermove', e => {
         if (!dragState) return;
-        const clip = clips.find(c => c.id === selectedId);
-        if (!clip) return;
+        const clip = getSelectedClip();
+        const range = getActiveRange(clip);
+        if (!clip || !range) return;
 
         const rect = el.timelineTrack.getBoundingClientRect();
         const deltaSec = ((e.clientX - dragState.startX) / rect.width) * clip.duration;
         const minGap = Math.min(0.2, clip.duration);
 
         if (dragState.type === 'start') {
-          const nextStart = Math.max(0, Math.min(dragState.initStart + deltaSec, clip.end - minGap));
-          clip.start = Number(nextStart.toFixed(2));
-          el.previewVideo.currentTime = clip.start;
+          const nextStart = Math.max(0, Math.min(dragState.initStart + deltaSec, range.end - minGap));
+          range.start = Number(nextStart.toFixed(2));
+          el.previewVideo.currentTime = range.start;
         } else if (dragState.type === 'end') {
-          const nextEnd = Math.min(clip.duration, Math.max(dragState.initEnd + deltaSec, clip.start + minGap));
-          clip.end = Number(nextEnd.toFixed(2));
-          el.previewVideo.currentTime = clip.end;
+          const nextEnd = Math.min(clip.duration, Math.max(dragState.initEnd + deltaSec, range.start + minGap));
+          range.end = Number(nextEnd.toFixed(2));
+          el.previewVideo.currentTime = range.end;
         } else if (dragState.type === 'range') {
           const span = dragState.initEnd - dragState.initStart;
           let nextStart = dragState.initStart + deltaSec;
           if (nextStart < 0) nextStart = 0;
           if (nextStart + span > clip.duration) nextStart = clip.duration - span;
-          clip.start = Number(nextStart.toFixed(2));
-          clip.end = Number((nextStart + span).toFixed(2));
-          el.previewVideo.currentTime = clip.start;
+          range.start = Number(nextStart.toFixed(2));
+          range.end = Number((nextStart + span).toFixed(2));
+          el.previewVideo.currentTime = range.start;
         }
 
-        el.startTime.value = clip.start;
-        el.endTime.value = clip.end;
+        el.startTime.value = range.start;
+        el.endTime.value = range.end;
         syncTimelineUI();
+        renderRanges();
       });
 
       window.addEventListener('pointerup', () => {
@@ -742,14 +940,13 @@
       });
 
       el.previewVideo.addEventListener('timeupdate', () => {
-        const clip = clips.find(c => c.id === selectedId);
+        const clip = getSelectedClip();
         if (!clip || clip.duration <= 0) return;
         const playPct = Math.min(100, Math.max(0, (el.previewVideo.currentTime / clip.duration) * 100));
         el.timelinePlayhead.style.left = `${playPct}%`;
       });
     }
 
-    // FFmpeg 단일 스레드 코어 지연 로딩
     async function ensureFFmpeg() {
       if (ffmpegLoaded) return;
       el.engineStatus.textContent = 'FFmpeg 코어 다운로드 중...';
@@ -805,31 +1002,31 @@
       for (const file of files) {
         try {
           const meta = await probeVideoFile(file);
-          const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random()}`;
+          const initialRangeId = uid();
           clips.push({
-            id,
+            id: uid(),
             file,
             name: file.name,
             url: meta.url,
             duration: meta.duration,
             width: meta.width,
             height: meta.height,
-            start: 0,
-            end: meta.duration
+            ranges: [{ id: initialRangeId, start: 0, end: meta.duration }],
+            activeRangeId: initialRangeId
           });
-          if (!selectedId) selectedId = id;
+          if (!selectedClipId) selectedClipId = clips[0].id;
         } catch (err) {
           appendLog(`[오류] ${err.message}`);
         }
       }
 
       renderClips();
-      selectClip(selectedId);
+      selectClip(selectedClipId);
     }
 
     function selectClip(id) {
-      selectedId = id;
-      const clip = clips.find(c => c.id === id);
+      selectedClipId = id;
+      const clip = getSelectedClip();
 
       if (previewStopHandler) {
         el.previewVideo.removeEventListener('timeupdate', previewStopHandler);
@@ -840,49 +1037,68 @@
         el.previewVideo.removeAttribute('src');
         el.previewVideo.load();
         el.currentClipLabel.textContent = '선택된 클립 없음';
-        el.startTime.disabled = true;
-        el.endTime.disabled = true;
-        el.setStartBtn.disabled = true;
-        el.setEndBtn.disabled = true;
-        el.previewTrimBtn.disabled = true;
-        el.resetTrimBtn.disabled = true;
+        [el.startTime, el.endTime, el.setStartBtn, el.setEndBtn, el.previewTrimBtn, el.addRangeBtn, el.resetRangeBtn]
+          .forEach(n => { n.disabled = true; });
         syncTimelineUI();
+        renderRanges();
+        renderClips();
         updateButtons();
         return;
       }
 
+      const range = getActiveRange(clip);
       el.previewVideo.src = clip.url;
       el.currentClipLabel.textContent = `${clip.name} (${clip.width}×${clip.height})`;
-      el.startTime.disabled = false;
-      el.endTime.disabled = false;
-      el.setStartBtn.disabled = false;
-      el.setEndBtn.disabled = false;
-      el.previewTrimBtn.disabled = false;
-      el.resetTrimBtn.disabled = false;
+      [el.startTime, el.endTime, el.setStartBtn, el.setEndBtn, el.previewTrimBtn, el.addRangeBtn, el.resetRangeBtn]
+        .forEach(n => { n.disabled = false; });
 
       el.startTime.max = clip.duration;
       el.endTime.max = clip.duration;
-      el.startTime.value = clip.start;
-      el.endTime.value = clip.end;
+      el.startTime.value = range ? range.start : 0;
+      el.endTime.value = range ? range.end : clip.duration;
 
       syncTimelineUI();
+      renderRanges();
       renderClips();
       updateButtons();
     }
 
-    function updateSelectedTrim() {
-      const clip = clips.find(c => c.id === selectedId);
-      if (!clip) return;
+    function updateActiveRangeFromInputs() {
+      const clip = getSelectedClip();
+      const range = getActiveRange(clip);
+      if (!clip || !range) return;
 
       let s = Math.max(0, Math.min(Number(el.startTime.value) || 0, clip.duration));
       let e = Math.max(0, Math.min(Number(el.endTime.value) || 0, clip.duration));
       if (e <= s) e = Math.min(clip.duration, Number((s + 0.1).toFixed(2)));
 
-      clip.start = Number(s.toFixed(2));
-      clip.end = Number(e.toFixed(2));
-      el.startTime.value = clip.start;
-      el.endTime.value = clip.end;
+      range.start = Number(s.toFixed(2));
+      range.end = Number(e.toFixed(2));
+      el.startTime.value = range.start;
+      el.endTime.value = range.end;
+
       syncTimelineUI();
+      renderRanges();
+      renderClips();
+    }
+
+    function addNewRangeAtCurrentTime() {
+      const clip = getSelectedClip();
+      if (!clip) return;
+
+      const cur = Number(el.previewVideo.currentTime || 0);
+      const start = Number(Math.max(0, Math.min(cur, Math.max(0, clip.duration - 0.5))).toFixed(2));
+      const end = Number(Math.min(clip.duration, start + Math.min(5, Math.max(0.5, clip.duration - start))).toFixed(2));
+
+      const newRange = { id: uid(), start, end };
+      clip.ranges.push(newRange);
+      clip.activeRangeId = newRange.id;
+
+      el.startTime.value = newRange.start;
+      el.endTime.value = newRange.end;
+
+      syncTimelineUI();
+      renderRanges();
       renderClips();
     }
 
@@ -892,15 +1108,15 @@
 
       clips.forEach((clip, idx) => {
         const li = document.createElement('li');
-        li.className = `clip-item ${clip.id === selectedId ? 'active' : ''}`;
+        li.className = `clip-item ${clip.id === selectedClipId ? 'active' : ''}`;
         li.onclick = () => selectClip(clip.id);
 
-        const segLen = Math.max(0, clip.end - clip.start).toFixed(1);
+        const totalSel = getTotalSelectedDuration(clip).toFixed(1);
         li.innerHTML = `
           <div class="clip-meta">
             <div class="clip-title">${idx + 1}. ${escapeHtml(clip.name)}</div>
             <div class="clip-sub">
-              구간: ${formatTime(clip.start)} ~ ${formatTime(clip.end)} (${segLen}초) · ${clip.width}×${clip.height}
+              선택 구간 ${clip.ranges.length}개 · 합산 ${totalSel}초 / 전체 ${clip.duration.toFixed(1)}초
             </div>
           </div>
           <div class="clip-actions" onclick="event.stopPropagation()">
@@ -910,9 +1126,28 @@
           </div>
         `;
 
-        li.querySelector('[data-act="up"]').onclick = () => moveClip(idx, -1);
-        li.querySelector('[data-act="down"]').onclick = () => moveClip(idx, 1);
-        li.querySelector('[data-act="del"]').onclick = () => removeClip(clip.id);
+        li.querySelector('[data-act="up"]').onclick = () => {
+          const [item] = clips.splice(idx, 1);
+          clips.splice(idx - 1, 0, item);
+          renderClips();
+        };
+
+        li.querySelector('[data-act="down"]').onclick = () => {
+          const [item] = clips.splice(idx, 1);
+          clips.splice(idx + 1, 0, item);
+          renderClips();
+        };
+
+        li.querySelector('[data-act="del"]').onclick = () => {
+          URL.revokeObjectURL(clip.url);
+          const delIdx = clips.findIndex(c => c.id === clip.id);
+          clips.splice(delIdx, 1);
+          if (selectedClipId === clip.id) {
+            selectClip(clips[0] ? clips[0].id : null);
+          } else {
+            renderClips();
+          }
+        };
 
         el.clipList.appendChild(li);
       });
@@ -920,69 +1155,57 @@
       updateButtons();
     }
 
-    function moveClip(index, delta) {
-      const target = index + delta;
-      if (target < 0 || target >= clips.length) return;
-      const [item] = clips.splice(index, 1);
-      clips.splice(target, 0, item);
-      renderClips();
-    }
-
-    function removeClip(id) {
-      const idx = clips.findIndex(c => c.id === id);
-      if (idx === -1) return;
-      URL.revokeObjectURL(clips[idx].url);
-      clips.splice(idx, 1);
-
-      if (selectedId === id) {
-        selectedId = clips[0] ? clips[0].id : null;
-        selectClip(selectedId);
-      } else {
-        renderClips();
-      }
-    }
-
     function updateButtons() {
       const hasClips = clips.length > 0;
+      const clip = getSelectedClip();
       el.clearAllBtn.disabled = !hasClips;
-      el.exportSingleBtn.disabled = !selectedId;
-      el.exportMergeBtn.disabled = !hasClips;
+      el.exportClipRangesBtn.disabled = !clip || clip.ranges.length === 0;
+      el.exportAllRangesBtn.disabled = !hasClips;
     }
 
     function setBusy(busy) {
-      el.exportSingleBtn.disabled = busy || !selectedId;
-      el.exportMergeBtn.disabled = busy || clips.length === 0;
       el.clearAllBtn.disabled = busy || clips.length === 0;
+      el.exportClipRangesBtn.disabled = busy || !getSelectedClip();
+      el.exportAllRangesBtn.disabled = busy || clips.length === 0;
     }
 
-    async function processClips(targetClips, outputFilename) {
-      if (!targetClips.length) return;
+    // (clip, range) 작업 목록을 받아 순차 컷 후 하나로 병합
+    async function processTasks(tasks, outputFilename) {
+      if (!tasks.length) return;
       setBusy(true);
       el.resultBox.classList.remove('show');
       el.progressBar.value = 0;
-      setLog('[작업 시작] 입력 파일을 가상 파일시스템에 준비하는 중...');
+      setLog(`[작업 시작] 총 ${tasks.length}개 선택 구간을 추출해 하나로 합칩니다...`);
 
       try {
         await ensureFFmpeg();
         const mode = el.encodeMode.value;
         const segmentNames = [];
 
-        const baseW = targetClips[0].width % 2 === 0 ? targetClips[0].width : targetClips[0].width - 1;
-        const baseH = targetClips[0].height % 2 === 0 ? targetClips[0].height : targetClips[0].height - 1;
+        const firstClip = tasks[0].clip;
+        const baseW = firstClip.width % 2 === 0 ? firstClip.width : firstClip.width - 1;
+        const baseH = firstClip.height % 2 === 0 ? firstClip.height : firstClip.height - 1;
 
-        for (let i = 0; i < targetClips.length; i++) {
-          const clip = targetClips[i];
-          const inName = `in_${i}.mp4`;
+        // 동일 원본 파일은 한 번만 writeFile하도록 캐싱
+        const writtenInputs = new Map();
+
+        for (let i = 0; i < tasks.length; i++) {
+          const { clip, range, rangeIndex } = tasks[i];
+          let inName = writtenInputs.get(clip.id);
+          if (!inName) {
+            inName = `src_${writtenInputs.size}.mp4`;
+            await ffmpeg.writeFile(inName, await fetchFile(clip.file));
+            writtenInputs.set(clip.id, inName);
+          }
+
           const segName = `seg_${i}.mp4`;
+          const duration = Math.max(0.1, Number((range.end - range.start).toFixed(3)));
 
-          appendLog(`\n[${i + 1}/${targetClips.length}] 처리 중: ${clip.name} (${clip.start}s ~ ${clip.end}s)`);
-          await ffmpeg.writeFile(inName, await fetchFile(clip.file));
-
-          const duration = Math.max(0.1, Number((clip.end - clip.start).toFixed(3)));
+          appendLog(`\n[${i + 1}/${tasks.length}] ${clip.name} (구간 #${rangeIndex + 1}: ${range.start}s ~ ${range.end}s)`);
 
           if (mode === 'copy') {
             await ffmpeg.exec([
-              '-ss', String(clip.start),
+              '-ss', String(range.start),
               '-i', inName,
               '-t', String(duration),
               '-c', 'copy',
@@ -992,7 +1215,7 @@
           } else {
             const vf = `scale=${baseW}:${baseH}:force_original_aspect_ratio=decrease,pad=${baseW}:${baseH}:(ow-iw)/2:(oh-ih)/2,fps=30,format=yuv420p`;
             await ffmpeg.exec([
-              '-ss', String(clip.start),
+              '-ss', String(range.start),
               '-i', inName,
               '-t', String(duration),
               '-vf', vf,
@@ -1007,18 +1230,22 @@
             ]);
           }
 
-          await ffmpeg.deleteFile(inName);
           segmentNames.push(segName);
         }
 
-        const finalName = 'final_output.mp4';
+        // 원본 입력 파일 정리
+        for (const inName of writtenInputs.values()) {
+          await ffmpeg.deleteFile(inName);
+        }
+
+        const finalName = 'final_merged_ranges.mp4';
 
         if (segmentNames.length === 1) {
           const data = await ffmpeg.readFile(segmentNames[0]);
           await ffmpeg.deleteFile(segmentNames[0]);
           publishResult(data, outputFilename);
         } else {
-          appendLog('\n[병합] 자른 클립들을 하나로 이어 붙이는 중...');
+          appendLog('\n[병합] 선택된 구간들을 순서대로 이어 붙이는 중...');
           const listContent = segmentNames.map(name => `file '${name}'`).join('\n');
           await ffmpeg.writeFile('concat_list.txt', new TextEncoder().encode(listContent));
 
@@ -1043,7 +1270,7 @@
         }
 
         el.progressBar.value = 100;
-        appendLog('\n[완료] 모든 처리가 성공적으로 끝났습니다.');
+        appendLog('\n[완료] 선택 구간 병합 파일이 생성되었습니다.');
       } catch (err) {
         console.error(err);
         appendLog(`\n[오류 발생] ${err.message || err}`);
@@ -1091,32 +1318,47 @@
       addFiles(e.dataTransfer.files);
     };
 
-    el.startTime.onchange = updateSelectedTrim;
-    el.endTime.onchange = updateSelectedTrim;
+    el.startTime.onchange = updateActiveRangeFromInputs;
+    el.endTime.onchange = updateActiveRangeFromInputs;
+    el.addRangeBtn.onclick = addNewRangeAtCurrentTime;
+
+    el.resetRangeBtn.onclick = () => {
+      const clip = getSelectedClip();
+      const range = getActiveRange(clip);
+      if (!clip || !range) return;
+      range.start = 0;
+      range.end = clip.duration;
+      el.startTime.value = range.start;
+      el.endTime.value = range.end;
+      syncTimelineUI();
+      renderRanges();
+      renderClips();
+    };
 
     el.setStartBtn.onclick = () => {
-      el.startTime.value = el.previewVideo.currentTime.toFixed(2);
-      updateSelectedTrim();
+      el.startTime.value = Number(el.previewVideo.currentTime || 0).toFixed(2);
+      updateActiveRangeFromInputs();
     };
 
     el.setEndBtn.onclick = () => {
-      el.endTime.value = el.previewVideo.currentTime.toFixed(2);
-      updateSelectedTrim();
+      el.endTime.value = Number(el.previewVideo.currentTime || 0).toFixed(2);
+      updateActiveRangeFromInputs();
     };
 
     el.previewTrimBtn.onclick = () => {
-      const clip = clips.find(c => c.id === selectedId);
-      if (!clip) return;
+      const clip = getSelectedClip();
+      const range = getActiveRange(clip);
+      if (!clip || !range) return;
 
       if (previewStopHandler) {
         el.previewVideo.removeEventListener('timeupdate', previewStopHandler);
       }
 
-      el.previewVideo.currentTime = clip.start;
+      el.previewVideo.currentTime = range.start;
       el.previewVideo.play();
 
       previewStopHandler = () => {
-        if (el.previewVideo.currentTime >= clip.end) {
+        if (el.previewVideo.currentTime >= range.end) {
           el.previewVideo.pause();
           el.previewVideo.removeEventListener('timeupdate', previewStopHandler);
           previewStopHandler = null;
@@ -1125,30 +1367,29 @@
       el.previewVideo.addEventListener('timeupdate', previewStopHandler);
     };
 
-    el.resetTrimBtn.onclick = () => {
-      const clip = clips.find(c => c.id === selectedId);
-      if (!clip) return;
-      el.startTime.value = 0;
-      el.endTime.value = clip.duration;
-      updateSelectedTrim();
-    };
-
     el.clearAllBtn.onclick = () => {
       clips.forEach(c => URL.revokeObjectURL(c.url));
       clips = [];
       selectClip(null);
-      renderClips();
     };
 
-    el.exportSingleBtn.onclick = () => {
-      const clip = clips.find(c => c.id === selectedId);
-      if (!clip) return;
+    el.exportClipRangesBtn.onclick = () => {
+      const clip = getSelectedClip();
+      if (!clip || !clip.ranges.length) return;
+      const tasks = clip.ranges.map((range, idx) => ({ clip, range, rangeIndex: idx }));
       const baseName = clip.name.replace(/\.mp4$/i, '');
-      processClips([clip], `${baseName}_trimmed.mp4`);
+      processTasks(tasks, `${baseName}_${tasks.length}ranges_merged.mp4`);
     };
 
-    el.exportMergeBtn.onclick = () => {
-      processClips(clips, `merged_${clips.length}clips.mp4`);
+    el.exportAllRangesBtn.onclick = () => {
+      const tasks = [];
+      clips.forEach(clip => {
+        clip.ranges.forEach((range, idx) => {
+          tasks.push({ clip, range, rangeIndex: idx });
+        });
+      });
+      if (!tasks.length) return;
+      processTasks(tasks, `all_${tasks.length}ranges_merged.mp4`);
     };
   </script>
 </body>
