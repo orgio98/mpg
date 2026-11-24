@@ -94,7 +94,6 @@
       display: block;
     }
 
-    /* ===== 듀얼 핸들 타임라인 슬라이더 ===== */
     .timeline-box {
       margin-top: 14px;
       background: var(--panel-alt);
@@ -229,7 +228,6 @@
       font-variant-numeric: tabular-nums;
     }
 
-    /* ===== 선택 구간 리스트 ===== */
     .ranges-panel {
       margin-top: 12px;
       background: var(--panel-alt);
@@ -484,7 +482,7 @@
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size: 0.76rem;
       color: #cbd5e1;
-      max-height: 120px;
+      max-height: 140px;
       overflow-y: auto;
       white-space: pre-wrap;
     }
@@ -524,7 +522,6 @@
     </header>
 
     <div class="grid">
-      <!-- 왼쪽: 미리보기, 타임라인 슬라이더 및 다중 선택 구간 목록 -->
       <section class="card">
         <h2>
           <span>미리보기 &amp; 선택 구간 편집</span>
@@ -533,7 +530,6 @@
 
         <video id="previewVideo" controls playsinline></video>
 
-        <!-- 듀얼 핸들 타임라인 구간 슬라이더 -->
         <div class="timeline-box disabled" id="timelineBox">
           <div class="timeline-header">
             <span>활성 구간: <strong id="rangeSummary">00:00.0 ~ 00:00.0</strong></span>
@@ -556,7 +552,6 @@
           </div>
         </div>
 
-        <!-- 다중 선택 구간 관리 -->
         <div class="ranges-panel">
           <div class="ranges-head">
             <span class="ranges-head-title">이 클립의 선택 구간 (<span id="rangeCount">0</span>개)</span>
@@ -594,7 +589,6 @@
         </div>
       </section>
 
-      <!-- 오른쪽: 클립 목록 & 순서 편집 -->
       <section class="card">
         <h2>
           <span>클립 목록 (<span id="clipCount">0</span>개)</span>
@@ -611,7 +605,6 @@
       </section>
     </div>
 
-    <!-- 하단: 선택 구간 병합 및 내보내기 -->
     <section class="card" style="margin-top:20px;">
       <h2>선택 구간 합치기 및 내보내기</h2>
       <div class="export-bar">
@@ -646,9 +639,8 @@
     </section>
   </div>
 
-  <!-- GitHub Pages 호환 단일 스레드 FFmpeg.wasm (UMD) -->
-  <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
-  <script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
 
   <script>
     const { FFmpeg } = FFmpegWASM;
@@ -941,11 +933,10 @@
       });
     }
 
-    // Cross-Origin Worker 차단을 피하기 위해 Worker, Core, Wasm 모두 Blob URL로 로드
     async function ensureFFmpeg() {
       if (ffmpegLoaded) return;
       el.engineStatus.textContent = 'FFmpeg 코어 다운로드 중...';
-      appendLog('[시스템] FFmpeg Worker 및 WebAssembly 코어를 불러오는 중입니다 (최초 1회 약 25MB)...');
+      appendLog('[시스템] FFmpeg 코어를 불러오는 중입니다 (최초 1회 약 25MB)...');
 
       ffmpeg = new FFmpeg();
       ffmpeg.on('log', ({ message }) => appendLog(message));
@@ -955,11 +946,9 @@
         }
       });
 
-      const ffmpegBase = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd';
-      const coreBase = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+      const coreBase = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd';
 
       await ffmpeg.load({
-        classWorkerURL: await toBlobURL(`${ffmpegBase}/814.ffmpeg.js`, 'text/javascript'),
         coreURL: await toBlobURL(`${coreBase}/ffmpeg-core.js`, 'text/javascript'),
         wasmURL: await toBlobURL(`${coreBase}/ffmpeg-core.wasm`, 'application/wasm')
       });
@@ -1268,8 +1257,10 @@
         appendLog('\n[완료] 선택 구간 병합 파일이 생성되었습니다.');
       } catch (err) {
         console.error(err);
-        appendLog(`\n[오류 발생] ${err.message || err}`);
-        alert('영상 처리 중 오류가 발생했습니다. 로그를 확인해 주세요.');
+        el.engineStatus.textContent = 'FFmpeg 초기화 오류';
+        const detail = err?.stack || err?.message || String(err);
+        appendLog(`\n[오류 발생] ${detail}`);
+        alert(`영상 처리 중 오류가 발생했습니다: ${err?.message || err}`);
       } finally {
         setBusy(false);
       }
