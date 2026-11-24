@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MP4 Studio Lite — 브라우저 MP4 자르기 & 붙이기</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --panel-alt: #263348;
+      --border: #334155;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --accent: #10b981;
+      --danger: #ef4444;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    .container {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 24px 16px 48px;
+    }
+
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 1.4rem;
+      letter-spacing: -0.02em;
+    }
+
+    .badge {
+      font-size: 0.78rem;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(59, 130, 246, 0.16);
+      color: #93c5fd;
+      border: 1px solid rgba(59, 130, 246, 0.35);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1.25fr 0.95fr;
+      gap: 20px;
+    }
+
+    @media (max-width: 860px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+    }
+
+    .card h2 {
+      margin: 0 0 12px;
+      font-size: 1.05rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    video {
+      width: 100%;
+      max-height: 350px;
+      background: #000;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      display: block;
+    }
+
+    /* ===== 듀얼 핸들 타임라인 슬라이더 ===== */
+    .timeline-box {
+      margin-top: 14px;
+      background: var(--panel-alt);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      user-select: none;
+    }
+
+    .timeline-box.disabled {
+      opacity: 0.45;
+      pointer-events: none;
+    }
+
+    .timeline-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .timeline-header strong {
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .timeline-track-wrap {
+      position: relative;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      touch-action: none;
+      cursor: pointer;
+    }
+
+    .timeline-track {
+      position: relative;
+      width: 100%;
+      height: 14px;
+      background: #0b1220;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      overflow: visible;
+    }
+
+    /* 선택된 구간 하이라이트 (드래그로 통째 이동 가능) */
+    .timeline-range {
+      position: absolute;
+      top: -1px;
+      height: 14px;
+      background: linear-gradient(90deg, rgba(59, 130, 246, 0.42), rgba(16, 185, 129, 0.42));
+      border-top: 2px solid #60a5fa;
+      border-bottom: 2px solid #34d399;
+      cursor: grab;
+    }
+
+    .timeline-range:active {
+      cursor: grabbing;
+    }
+
+    /* 현재 재생 위치 (Playhead) */
+    .timeline-playhead {
+      position: absolute;
+      top: -6px;
+      width: 2px;
+      height: 26px;
+      background: #f43f5e;
+      pointer-events: none;
+      transform: translateX(-50%);
+      z-index: 2;
+    }
+
+    /* 시작 / 종료 드래그 핸들 */
+    .timeline-handle {
+      position: absolute;
+      top: 50%;
+      width: 18px;
+      height: 30px;
+      transform: translate(-50%, -50%);
+      border-radius: 5px;
+      cursor: ew-resize;
+      z-index: 3;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+      transition: transform 0.08s ease;
+    }
+
+    .timeline-handle:hover,
+    .timeline-handle.dragging {
+      transform: translate(-50%, -50%) scale(1.1);
+    }
+
+    .timeline-handle::after {
+      content: "";
+      width: 4px;
+      height: 14px;
+      border-left: 1.5px solid rgba(255, 255, 255, 0.85);
+      border-right: 1.5px solid rgba(255, 255, 255, 0.85);
+    }
+
+    .handle-start {
+      background: var(--primary);
+      border: 1px solid #93c5fd;
+    }
+
+    .handle-end {
+      background: var(--accent);
+      border: 1px solid #6ee7b7;
+    }
+
+    .timeline-ticks {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-top: 4px;
+      font-variant-numeric: tabular-nums;
+    }
+    /* ==================================== */
+
+    .trim-controls {
+      margin-top: 10px;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      background: var(--panel-alt);
+      padding: 12px;
+      border-radius: 8px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .field label {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .input-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    input[type="number"], select {
+      width: 100%;
+      background: var(--bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 7px 10px;
+      font-size: 0.9rem;
+    }
+
+    button {
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--panel-alt);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 7px 12px;
+      font-size: 0.85rem;
+      font-weight: 500;
+      transition: background 0.15s, border-color 0.15s;
+      white-space: nowrap;
+    }
+
+    button:hover:not(:disabled) {
+      background: #334155;
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    button.primary {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #fff;
+    }
+
+    button.primary:hover:not(:disabled) {
+      background: var(--primary-hover);
+    }
+
+    button.accent {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #06281e;
+      font-weight: 600;
+    }
+
+    button.danger {
+      color: #fca5a5;
+      border-color: rgba(239, 68, 68, 0.4);
+    }
+
+    .dropzone {
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 18px;
+      text-align: center;
+      color: var(--muted);
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      margin-bottom: 14px;
+    }
+
+    .dropzone.dragover {
+      border-color: var(--primary);
+      background: rgba(59, 130, 246, 0.08);
+      color: var(--text);
+    }
+
+    .clip-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 430px;
+      overflow-y: auto;
+    }
+
+    .clip-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: var(--panel-alt);
+      border: 1px solid transparent;
+      cursor: pointer;
+    }
+
+    .clip-item.active {
+      border-color: var(--primary);
+      background: rgba(59, 130, 246, 0.14);
+    }
+
+    .clip-meta {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .clip-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .clip-sub {
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .clip-actions {
+      display: flex;
+      gap: 4px;
+    }
+
+    .clip-actions button {
+      padding: 4px 8px;
+      font-size: 0.78rem;
+    }
+
+    .export-bar {
+      margin-top: 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .mode-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .progress-wrap {
+      margin-top: 14px;
+    }
+
+    progress {
+      width: 100%;
+      height: 10px;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .log-box {
+      margin-top: 10px;
+      background: #090d16;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.76rem;
+      color: #cbd5e1;
+      max-height: 120px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+
+    .result-box {
+      margin-top: 16px;
+      padding: 14px;
+      border-radius: 8px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      display: none;
+    }
+
+    .result-box.show {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .hint {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>🎬 MP4 Studio Lite</h1>
+        <div class="hint">서버 업로드 없이 브라우저에서 직접 MP4 자르기 · 순서 변경 · 붙이기</div>
+      </div>
+      <span class="badge" id="engineStatus">FFmpeg 엔진 대기 중</span>
+    </header>
+
+    <div class="grid">
+      <!-- 왼쪽: 미리보기 및 타임라인 슬라이더 -->
+      <section class="card">
+        <h2>
+          <span>미리보기 &amp; 구간 자르기</span>
+          <span id="currentClipLabel" style="font-size:0.82rem; color:var(--muted);">선택된 클립 없음</span>
+        </h2>
+
+        <video id="previewVideo" controls playsinline></video>
+
+        <!-- 듀얼 핸들 타임라인 구간 슬라이더 -->
+        <div class="timeline-box disabled" id="timelineBox">
+          <div class="timeline-header">
+            <span>선택 구간: <strong id="rangeSummary">00:00.0 ~ 00:00.0</strong></span>
+            <span>길이: <strong id="rangeDuration">0.0초</strong></span>
+          </div>
+
+          <div class="timeline-track-wrap" id="timelineWrap">
+            <div class="timeline-track" id="timelineTrack">
+              <div class="timeline-range" id="timelineRange"></div>
+              <div class="timeline-playhead" id="timelinePlayhead" style="left:0%;"></div>
+              <div class="timeline-handle handle-start" id="handleStart" title="시작 지점 드래그" style="left:0%;"></div>
+              <div class="timeline-handle handle-end" id="handleEnd" title="종료 지점 드래그" style="left:100%;"></div>
+            </div>
+          </div>
+
+          <div class="timeline-ticks">
+            <span id="tickStart">00:00.0</span>
+            <span id="tickMid">00:00.0</span>
+            <span id="tickEnd">00:00.0</span>
+          </div>
+        </div>
+
+        <div class="trim-controls">
+          <div class="field">
+            <label for="startTime">시작 시간 (초)</label>
+            <div class="input-row">
+              <input type="number" id="startTime" step="0.1" min="0" value="0" disabled />
+              <button type="button" id="setStartBtn" disabled>현재 위치</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="endTime">종료 시간 (초)</label>
+            <div class="input-row">
+              <input type="number" id="endTime" step="0.1" min="0" value="0" disabled />
+              <button type="button" id="setEndBtn" disabled>현재 위치</button>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+          <button type="button" id="previewTrimBtn" disabled>▶ 선택 구간 미리보기</button>
+          <button type="button" id="resetTrimBtn" disabled>구간 초기화</button>
+        </div>
+        <div class="hint">
+          • 파란색(시작)/초록색(종료) 핸들을 드래그하거나, 가운데 선택 바를 드래그해 구간을 통째로 이동할 수 있습니다.
+        </div>
+      </section>
+
+      <!-- 오른쪽: 클립 목록 & 순서 편집 -->
+      <section class="card">
+        <h2>
+          <span>클립 타임라인 (<span id="clipCount">0</span>개)</span>
+          <button type="button" id="clearAllBtn" class="danger" disabled>전체 비우기</button>
+        </h2>
+
+        <div class="dropzone" id="dropzone">
+          <strong>여기를 클릭하거나 MP4 파일을 드래그하세요</strong>
+          <div style="font-size:0.8rem; margin-top:4px;">여러 개의 .mp4 파일을 한 번에 추가할 수 있습니다</div>
+          <input type="file" id="fileInput" accept="video/mp4,.mp4" multiple hidden />
+        </div>
+
+        <ul class="clip-list" id="clipList"></ul>
+      </section>
+    </div>
+
+    <!-- 하단: 내보내기 설정 및 실행 -->
+    <section class="card" style="margin-top:20px;">
+      <h2>내보내기 (자르기 / 붙이기 실행)</h2>
+      <div class="export-bar">
+        <div class="mode-group">
+          <label for="encodeMode" style="font-size:0.88rem; color:var(--muted);">처리 방식:</label>
+          <select id="encodeMode" style="width:auto; min-width:260px;">
+            <option value="copy">빠른 무손실 복사 (-c copy, 동일 규격 권장)</option>
+            <option value="reencode">정밀 재인코딩 (H.264/AAC, 이종 규격·정밀 컷)</option>
+          </select>
+        </div>
+
+        <div style="display:flex; gap:8px;">
+          <button type="button" id="exportSingleBtn" disabled>선택 클립만 자르기</button>
+          <button type="button" id="exportMergeBtn" class="primary" disabled>전체 클립 자르고 붙이기</button>
+        </div>
+      </div>
+
+      <div class="progress-wrap">
+        <progress id="progressBar" value="0" max="100"></progress>
+        <div class="log-box" id="logBox">준비 완료. MP4 파일을 추가한 뒤 작업을 실행하세요.</div>
+      </div>
+
+      <div class="result-box" id="resultBox">
+        <div>
+          <strong style="color:#6ee7b7;">✔ 작업이 완료되었습니다!</strong>
+          <div id="resultInfo" style="font-size:0.82rem; color:var(--muted);"></div>
+        </div>
+        <a id="downloadLink" download="edited_output.mp4" style="text-decoration:none;">
+          <button type="button" class="accent">⬇ 결과 MP4 다운로드</button>
+        </a>
+      </div>
+    </section>
+  </div>
+
+  <!-- GitHub Pages 호환 단일 스레드 FFmpeg.wasm (UMD) -->
+  <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
+  <script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
+
+  <script>
+    const { FFmpeg } = FFmpegWASM;
+    const { fetchFile, toBlobURL } = FFmpegUtil;
+
+    let ffmpeg = null;
+    let ffmpegLoaded = false;
+    let clips = [];
+    let selectedId = null;
+    let previewStopHandler = null;
+    let lastOutputUrl = null;
+
+    // 타임라인 드래그 상태
+    let dragState = null; // { type: 'start' | 'end' | 'range', startX, initStart, initEnd }
+
+    const el = {
+      engineStatus: document.getElementById('engineStatus'),
+      dropzone: document.getElementById('dropzone'),
+      fileInput: document.getElementById('fileInput'),
+      clipList: document.getElementById('clipList'),
+      clipCount: document.getElementById('clipCount'),
+      clearAllBtn: document.getElementById('clearAllBtn'),
+      previewVideo: document.getElementById('previewVideo'),
+      currentClipLabel: document.getElementById('currentClipLabel'),
+      timelineBox: document.getElementById('timelineBox'),
+      timelineWrap: document.getElementById('timelineWrap'),
+      timelineTrack: document.getElementById('timelineTrack'),
+      timelineRange: document.getElementById('timelineRange'),
+      timelinePlayhead: document.getElementById('timelinePlayhead'),
+      handleStart: document.getElementById('handleStart'),
+      handleEnd: document.getElementById('handleEnd'),
+      rangeSummary: document.getElementById('rangeSummary'),
+      rangeDuration: document.getElementById('rangeDuration'),
+      tickStart: document.getElementById('tickStart'),
+      tickMid: document.getElementById('tickMid'),
+      tickEnd: document.getElementById('tickEnd'),
+      startTime: document.getElementById('startTime'),
+      endTime: document.getElementById('endTime'),
+      setStartBtn: document.getElementById('setStartBtn'),
+      setEndBtn: document.getElementById('setEndBtn'),
+      previewTrimBtn: document.getElementById('previewTrimBtn'),
+      resetTrimBtn: document.getElementById('resetTrimBtn'),
+      encodeMode: document.getElementById('encodeMode'),
+      exportSingleBtn: document.getElementById('exportSingleBtn'),
+      exportMergeBtn: document.getElementById('exportMergeBtn'),
+      progressBar: document.getElementById('progressBar'),
+      logBox: document.getElementById('logBox'),
+      resultBox: document.getElementById('resultBox'),
+      resultInfo: document.getElementById('resultInfo'),
+      downloadLink: document.getElementById('downloadLink')
+    };
+
+    function appendLog(msg) {
+      el.logBox.textContent += `\n${msg}`;
+      el.logBox.scrollTop = el.logBox.scrollHeight;
+    }
+
+    function setLog(msg) {
+      el.logBox.textContent = msg;
+    }
+
+    function formatTime(sec) {
+      if (!Number.isFinite(sec)) return '00:00.0';
+      const m = Math.floor(sec / 60);
+      const s = (sec % 60).toFixed(1).padStart(4, '0');
+      return `${String(m).padStart(2, '0')}:${s}`;
+    }
+
+    // 타임라인 슬라이더 UI 동기화
+    function syncTimelineUI() {
+      const clip = clips.find(c => c.id === selectedId);
+      if (!clip || clip.duration <= 0) {
+        el.timelineBox.classList.add('disabled');
+        el.rangeSummary.textContent = '00:00.0 ~ 00:00.0';
+        el.rangeDuration.textContent = '0.0초';
+        el.tickStart.textContent = '00:00.0';
+        el.tickMid.textContent = '00:00.0';
+        el.tickEnd.textContent = '00:00.0';
+        el.handleStart.style.left = '0%';
+        el.handleEnd.style.left = '100%';
+        el.timelineRange.style.left = '0%';
+        el.timelineRange.style.width = '100%';
+        el.timelinePlayhead.style.left = '0%';
+        return;
+      }
+
+      el.timelineBox.classList.remove('disabled');
+      const startPct = (clip.start / clip.duration) * 100;
+      const endPct = (clip.end / clip.duration) * 100;
+
+      el.handleStart.style.left = `${startPct}%`;
+      el.handleEnd.style.left = `${endPct}%`;
+      el.timelineRange.style.left = `${startPct}%`;
+      el.timelineRange.style.width = `${Math.max(0, endPct - startPct)}%`;
+
+      el.rangeSummary.textContent = `${formatTime(clip.start)} ~ ${formatTime(clip.end)}`;
+      el.rangeDuration.textContent = `${Math.max(0, clip.end - clip.start).toFixed(1)}초`;
+
+      el.tickStart.textContent = formatTime(0);
+      el.tickMid.textContent = formatTime(clip.duration / 2);
+      el.tickEnd.textContent = formatTime(clip.duration);
+
+      const playPct = Math.min(100, Math.max(0, (el.previewVideo.currentTime / clip.duration) * 100));
+      el.timelinePlayhead.style.left = `${playPct}%`;
+    }
+
+    // 타임라인 드래그 이벤트 설정
+    function setupTimelineDrag() {
+      const startDrag = (type, e) => {
+        const clip = clips.find(c => c.id === selectedId);
+        if (!clip) return;
+        e.stopPropagation();
+        e.preventDefault();
+
+        dragState = {
+          type,
+          startX: e.clientX,
+          initStart: clip.start,
+          initEnd: clip.end
+        };
+
+        if (type === 'start') el.handleStart.classList.add('dragging');
+        if (type === 'end') el.handleEnd.classList.add('dragging');
+      };
+
+      el.handleStart.addEventListener('pointerdown', e => startDrag('start', e));
+      el.handleEnd.addEventListener('pointerdown', e => startDrag('end', e));
+      el.timelineRange.addEventListener('pointerdown', e => startDrag('range', e));
+
+      // 트랙 빈 공간 클릭 시 해당 위치로 재생 헤드 이동
+      el.timelineWrap.addEventListener('pointerdown', e => {
+        if (dragState) return;
+        const clip = clips.find(c => c.id === selectedId);
+        if (!clip) return;
+        const rect = el.timelineTrack.getBoundingClientRect();
+        const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+        el.previewVideo.currentTime = Number((ratio * clip.duration).toFixed(2));
+        syncTimelineUI();
+      });
+
+      window.addEventListener('pointermove', e => {
+        if (!dragState) return;
+        const clip = clips.find(c => c.id === selectedId);
+        if (!clip) return;
+
+        const rect = el.timelineTrack.getBoundingClientRect();
+        const deltaSec = ((e.clientX - dragState.startX) / rect.width) * clip.duration;
+        const minGap = Math.min(0.2, clip.duration);
+
+        if (dragState.type === 'start') {
+          const nextStart = Math.max(0, Math.min(dragState.initStart + deltaSec, clip.end - minGap));
+          clip.start = Number(nextStart.toFixed(2));
+          el.previewVideo.currentTime = clip.start;
+        } else if (dragState.type === 'end') {
+          const nextEnd = Math.min(clip.duration, Math.max(dragState.initEnd + deltaSec, clip.start + minGap));
+          clip.end = Number(nextEnd.toFixed(2));
+          el.previewVideo.currentTime = clip.end;
+        } else if (dragState.type === 'range') {
+          const span = dragState.initEnd - dragState.initStart;
+          let nextStart = dragState.initStart + deltaSec;
+          if (nextStart < 0) nextStart = 0;
+          if (nextStart + span > clip.duration) nextStart = clip.duration - span;
+          clip.start = Number(nextStart.toFixed(2));
+          clip.end = Number((nextStart + span).toFixed(2));
+          el.previewVideo.currentTime = clip.start;
+        }
+
+        el.startTime.value = clip.start;
+        el.endTime.value = clip.end;
+        syncTimelineUI();
+      });
+
+      window.addEventListener('pointerup', () => {
+        if (!dragState) return;
+        el.handleStart.classList.remove('dragging');
+        el.handleEnd.classList.remove('dragging');
+        dragState = null;
+        renderClips();
+      });
+
+      el.previewVideo.addEventListener('timeupdate', () => {
+        const clip = clips.find(c => c.id === selectedId);
+        if (!clip || clip.duration <= 0) return;
+        const playPct = Math.min(100, Math.max(0, (el.previewVideo.currentTime / clip.duration) * 100));
+        el.timelinePlayhead.style.left = `${playPct}%`;
+      });
+    }
+
+    // FFmpeg 단일 스레드 코어 지연 로딩
+    async function ensureFFmpeg() {
+      if (ffmpegLoaded) return;
+      el.engineStatus.textContent = 'FFmpeg 코어 다운로드 중...';
+      appendLog('[시스템] FFmpeg WebAssembly 코어를 불러오는 중입니다 (최초 1회 약 25MB)...');
+
+      ffmpeg = new FFmpeg();
+      ffmpeg.on('log', ({ message }) => appendLog(message));
+      ffmpeg.on('progress', ({ progress }) => {
+        if (Number.isFinite(progress)) {
+          el.progressBar.value = Math.min(100, Math.max(0, Math.round(progress * 100)));
+        }
+      });
+
+      const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+      await ffmpeg.load({
+        coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+        wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm')
+      });
+
+      ffmpegLoaded = true;
+      el.engineStatus.textContent = 'FFmpeg 준비 완료 (로컬 처리)';
+      appendLog('[시스템] FFmpeg 엔진 초기화 완료.');
+    }
+
+    function probeVideoFile(file) {
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const tempVideo = document.createElement('video');
+        tempVideo.preload = 'metadata';
+        tempVideo.src = url;
+        tempVideo.onloadedmetadata = () => {
+          resolve({
+            url,
+            duration: Number(tempVideo.duration.toFixed(2)),
+            width: tempVideo.videoWidth,
+            height: tempVideo.videoHeight
+          });
+        };
+        tempVideo.onerror = () => {
+          URL.revokeObjectURL(url);
+          reject(new Error(`메타데이터를 읽을 수 없습니다: ${file.name}`));
+        };
+      });
+    }
+
+    async function addFiles(fileList) {
+      const files = Array.from(fileList).filter(f => f.type === 'video/mp4' || f.name.toLowerCase().endsWith('.mp4'));
+      if (!files.length) {
+        alert('MP4 형식의 파일만 추가할 수 있습니다.');
+        return;
+      }
+
+      for (const file of files) {
+        try {
+          const meta = await probeVideoFile(file);
+          const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}_${Math.random()}`;
+          clips.push({
+            id,
+            file,
+            name: file.name,
+            url: meta.url,
+            duration: meta.duration,
+            width: meta.width,
+            height: meta.height,
+            start: 0,
+            end: meta.duration
+          });
+          if (!selectedId) selectedId = id;
+        } catch (err) {
+          appendLog(`[오류] ${err.message}`);
+        }
+      }
+
+      renderClips();
+      selectClip(selectedId);
+    }
+
+    function selectClip(id) {
+      selectedId = id;
+      const clip = clips.find(c => c.id === id);
+
+      if (previewStopHandler) {
+        el.previewVideo.removeEventListener('timeupdate', previewStopHandler);
+        previewStopHandler = null;
+      }
+
+      if (!clip) {
+        el.previewVideo.removeAttribute('src');
+        el.previewVideo.load();
+        el.currentClipLabel.textContent = '선택된 클립 없음';
+        el.startTime.disabled = true;
+        el.endTime.disabled = true;
+        el.setStartBtn.disabled = true;
+        el.setEndBtn.disabled = true;
+        el.previewTrimBtn.disabled = true;
+        el.resetTrimBtn.disabled = true;
+        syncTimelineUI();
+        updateButtons();
+        return;
+      }
+
+      el.previewVideo.src = clip.url;
+      el.currentClipLabel.textContent = `${clip.name} (${clip.width}×${clip.height})`;
+      el.startTime.disabled = false;
+      el.endTime.disabled = false;
+      el.setStartBtn.disabled = false;
+      el.setEndBtn.disabled = false;
+      el.previewTrimBtn.disabled = false;
+      el.resetTrimBtn.disabled = false;
+
+      el.startTime.max = clip.duration;
+      el.endTime.max = clip.duration;
+      el.startTime.value = clip.start;
+      el.endTime.value = clip.end;
+
+      syncTimelineUI();
+      renderClips();
+      updateButtons();
+    }
+
+    function updateSelectedTrim() {
+      const clip = clips.find(c => c.id === selectedId);
+      if (!clip) return;
+
+      let s = Math.max(0, Math.min(Number(el.startTime.value) || 0, clip.duration));
+      let e = Math.max(0, Math.min(Number(el.endTime.value) || 0, clip.duration));
+      if (e <= s) e = Math.min(clip.duration, Number((s + 0.1).toFixed(2)));
+
+      clip.start = Number(s.toFixed(2));
+      clip.end = Number(e.toFixed(2));
+      el.startTime.value = clip.start;
+      el.endTime.value = clip.end;
+      syncTimelineUI();
+      renderClips();
+    }
+
+    function renderClips() {
+      el.clipCount.textContent = clips.length;
+      el.clipList.innerHTML = '';
+
+      clips.forEach((clip, idx) => {
+        const li = document.createElement('li');
+        li.className = `clip-item ${clip.id === selectedId ? 'active' : ''}`;
+        li.onclick = () => selectClip(clip.id);
+
+        const segLen = Math.max(0, clip.end - clip.start).toFixed(1);
+        li.innerHTML = `
+          <div class="clip-meta">
+            <div class="clip-title">${idx + 1}. ${escapeHtml(clip.name)}</div>
+            <div class="clip-sub">
+              구간: ${formatTime(clip.start)} ~ ${formatTime(clip.end)} (${segLen}초) · ${clip.width}×${clip.height}
+            </div>
+          </div>
+          <div class="clip-actions" onclick="event.stopPropagation()">
+            <button type="button" title="위로" ${idx === 0 ? 'disabled' : ''} data-act="up">▲</button>
+            <button type="button" title="아래로" ${idx === clips.length - 1 ? 'disabled' : ''} data-act="down">▼</button>
+            <button type="button" class="danger" title="삭제" data-act="del">✕</button>
+          </div>
+        `;
+
+        li.querySelector('[data-act="up"]').onclick = () => moveClip(idx, -1);
+        li.querySelector('[data-act="down"]').onclick = () => moveClip(idx, 1);
+        li.querySelector('[data-act="del"]').onclick = () => removeClip(clip.id);
+
+        el.clipList.appendChild(li);
+      });
+
+      updateButtons();
+    }
+
+    function moveClip(index, delta) {
+      const target = index + delta;
+      if (target < 0 || target >= clips.length) return;
+      const [item] = clips.splice(index, 1);
+      clips.splice(target, 0, item);
+      renderClips();
+    }
+
+    function removeClip(id) {
+      const idx = clips.findIndex(c => c.id === id);
+      if (idx === -1) return;
+      URL.revokeObjectURL(clips[idx].url);
+      clips.splice(idx, 1);
+
+      if (selectedId === id) {
+        selectedId = clips[0] ? clips[0].id : null;
+        selectClip(selectedId);
+      } else {
+        renderClips();
+      }
+    }
+
+    function updateButtons() {
+      const hasClips = clips.length > 0;
+      el.clearAllBtn.disabled = !hasClips;
+      el.exportSingleBtn.disabled = !selectedId;
+      el.exportMergeBtn.disabled = !hasClips;
+    }
+
+    function setBusy(busy) {
+      el.exportSingleBtn.disabled = busy || !selectedId;
+      el.exportMergeBtn.disabled = busy || clips.length === 0;
+      el.clearAllBtn.disabled = busy || clips.length === 0;
+    }
+
+    async function processClips(targetClips, outputFilename) {
+      if (!targetClips.length) return;
+      setBusy(true);
+      el.resultBox.classList.remove('show');
+      el.progressBar.value = 0;
+      setLog('[작업 시작] 입력 파일을 가상 파일시스템에 준비하는 중...');
+
+      try {
+        await ensureFFmpeg();
+        const mode = el.encodeMode.value;
+        const segmentNames = [];
+
+        const baseW = targetClips[0].width % 2 === 0 ? targetClips[0].width : targetClips[0].width - 1;
+        const baseH = targetClips[0].height % 2 === 0 ? targetClips[0].height : targetClips[0].height - 1;
+
+        for (let i = 0; i < targetClips.length; i++) {
+          const clip = targetClips[i];
+          const inName = `in_${i}.mp4`;
+          const segName = `seg_${i}.mp4`;
+
+          appendLog(`\n[${i + 1}/${targetClips.length}] 처리 중: ${clip.name} (${clip.start}s ~ ${clip.end}s)`);
+          await ffmpeg.writeFile(inName, await fetchFile(clip.file));
+
+          const duration = Math.max(0.1, Number((clip.end - clip.start).toFixed(3)));
+
+          if (mode === 'copy') {
+            await ffmpeg.exec([
+              '-ss', String(clip.start),
+              '-i', inName,
+              '-t', String(duration),
+              '-c', 'copy',
+              '-avoid_negative_ts', 'make_zero',
+              segName
+            ]);
+          } else {
+            const vf = `scale=${baseW}:${baseH}:force_original_aspect_ratio=decrease,pad=${baseW}:${baseH}:(ow-iw)/2:(oh-ih)/2,fps=30,format=yuv420p`;
+            await ffmpeg.exec([
+              '-ss', String(clip.start),
+              '-i', inName,
+              '-t', String(duration),
+              '-vf', vf,
+              '-c:v', 'libx264',
+              '-preset', 'veryfast',
+              '-crf', '22',
+              '-c:a', 'aac',
+              '-ar', '44100',
+              '-ac', '2',
+              '-b:a', '128k',
+              segName
+            ]);
+          }
+
+          await ffmpeg.deleteFile(inName);
+          segmentNames.push(segName);
+        }
+
+        const finalName = 'final_output.mp4';
+
+        if (segmentNames.length === 1) {
+          const data = await ffmpeg.readFile(segmentNames[0]);
+          await ffmpeg.deleteFile(segmentNames[0]);
+          publishResult(data, outputFilename);
+        } else {
+          appendLog('\n[병합] 자른 클립들을 하나로 이어 붙이는 중...');
+          const listContent = segmentNames.map(name => `file '${name}'`).join('\n');
+          await ffmpeg.writeFile('concat_list.txt', new TextEncoder().encode(listContent));
+
+          await ffmpeg.exec([
+            '-f', 'concat',
+            '-safe', '0',
+            '-i', 'concat_list.txt',
+            '-c', 'copy',
+            '-movflags', '+faststart',
+            finalName
+          ]);
+
+          const data = await ffmpeg.readFile(finalName);
+
+          await ffmpeg.deleteFile('concat_list.txt');
+          await ffmpeg.deleteFile(finalName);
+          for (const seg of segmentNames) {
+            await ffmpeg.deleteFile(seg);
+          }
+
+          publishResult(data, outputFilename);
+        }
+
+        el.progressBar.value = 100;
+        appendLog('\n[완료] 모든 처리가 성공적으로 끝났습니다.');
+      } catch (err) {
+        console.error(err);
+        appendLog(`\n[오류 발생] ${err.message || err}`);
+        alert('영상 처리 중 오류가 발생했습니다. 로그를 확인해 주세요.');
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    function publishResult(uint8Array, filename) {
+      if (lastOutputUrl) URL.revokeObjectURL(lastOutputUrl);
+      const blob = new Blob([uint8Array.buffer], { type: 'video/mp4' });
+      lastOutputUrl = URL.createObjectURL(blob);
+
+      const mb = (blob.size / (1024 * 1024)).toFixed(2);
+      el.downloadLink.href = lastOutputUrl;
+      el.downloadLink.download = filename;
+      el.resultInfo.textContent = `파일명: ${filename} · 크기: ${mb} MB`;
+      el.resultBox.classList.add('show');
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[m]));
+    }
+
+    // 이벤트 바인딩
+    setupTimelineDrag();
+
+    el.dropzone.onclick = () => el.fileInput.click();
+    el.fileInput.onchange = e => {
+      addFiles(e.target.files);
+      e.target.value = '';
+    };
+
+    el.dropzone.ondragover = e => {
+      e.preventDefault();
+      el.dropzone.classList.add('dragover');
+    };
+    el.dropzone.ondragleave = () => el.dropzone.classList.remove('dragover');
+    el.dropzone.ondrop = e => {
+      e.preventDefault();
+      el.dropzone.classList.remove('dragover');
+      addFiles(e.dataTransfer.files);
+    };
+
+    el.startTime.onchange = updateSelectedTrim;
+    el.endTime.onchange = updateSelectedTrim;
+
+    el.setStartBtn.onclick = () => {
+      el.startTime.value = el.previewVideo.currentTime.toFixed(2);
+      updateSelectedTrim();
+    };
+
+    el.setEndBtn.onclick = () => {
+      el.endTime.value = el.previewVideo.currentTime.toFixed(2);
+      updateSelectedTrim();
+    };
+
+    el.previewTrimBtn.onclick = () => {
+      const clip = clips.find(c => c.id === selectedId);
+      if (!clip) return;
+
+      if (previewStopHandler) {
+        el.previewVideo.removeEventListener('timeupdate', previewStopHandler);
+      }
+
+      el.previewVideo.currentTime = clip.start;
+      el.previewVideo.play();
+
+      previewStopHandler = () => {
+        if (el.previewVideo.currentTime >= clip.end) {
+          el.previewVideo.pause();
+          el.previewVideo.removeEventListener('timeupdate', previewStopHandler);
+          previewStopHandler = null;
+        }
+      };
+      el.previewVideo.addEventListener('timeupdate', previewStopHandler);
+    };
+
+    el.resetTrimBtn.onclick = () => {
+      const clip = clips.find(c => c.id === selectedId);
+      if (!clip) return;
+      el.startTime.value = 0;
+      el.endTime.value = clip.duration;
+      updateSelectedTrim();
+    };
+
+    el.clearAllBtn.onclick = () => {
+      clips.forEach(c => URL.revokeObjectURL(c.url));
+      clips = [];
+      selectClip(null);
+      renderClips();
+    };
+
+    el.exportSingleBtn.onclick = () => {
+      const clip = clips.find(c => c.id === selectedId);
+      if (!clip) return;
+      const baseName = clip.name.replace(/\.mp4$/i, '');
+      processClips([clip], `${baseName}_trimmed.mp4`);
+    };
+
+    el.exportMergeBtn.onclick = () => {
+      processClips(clips, `merged_${clips.length}clips.mp4`);
+    };
+  </script>
+</body>
+</html>
