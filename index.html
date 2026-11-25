@@ -2133,6 +2133,9 @@
         const firstClip = tasks[0].clip;
         const { w: baseW, h: baseH } = computeTargetSize(firstClip.width, firstClip.height, capRes);
 
+        // 재인코딩 조각을 2개 이상 이어 붙일 때는 MPEG-TS 중간 파일을 써서 이음매의 타임스탬프 경고를 방지
+        const segExt = (mode === 'reencode' && tasks.length > 1) ? 'ts' : 'mp4';
+
         let currentInput = null;
         let currentClipId = null;
 
@@ -2147,7 +2150,7 @@
           }
           const inName = currentInput.path;
 
-          const segName = `seg_${i}.mp4`;
+          const segName = `seg_${i}.${segExt}`;
           const duration = Math.max(0.05, Number((range.end - range.start).toFixed(3)));
           const label = `[${i + 1}/${tasks.length}] ${clip.name} 구간 #${rangeIndex + 1} 추출`;
 
@@ -2162,6 +2165,8 @@
               '-map', '0:a:0?',
               '-c', 'copy',
               '-avoid_negative_ts', 'make_zero',
+              // 파일마다 다른 영상 타임스케일을 통일 (병합 시 "incorrect timestamps" 경고 및 재생 속도 오류 방지)
+              '-video_track_timescale', '90000',
               segName
             ], label);
           } else {
@@ -2180,7 +2185,7 @@
               '-ar', '44100',
               '-ac', '2',
               '-b:a', '128k',
-              '-video_track_timescale', '90000',
+              ...(segExt === 'mp4' ? ['-video_track_timescale', '90000'] : []),
               segName
             ], label);
           }
