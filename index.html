@@ -155,6 +155,7 @@
       color: var(--muted);
       letter-spacing: 0.06em;
       user-select: none;
+      cursor: pointer;
     }
 
     .clips-card.collapsed .vertical-label {
@@ -212,6 +213,7 @@
       display: flex;
     }
 
+    /* ===== 부드러운 60fps VLLO 타임라인 ===== */
     .vllo-editor {
       margin-top: 12px;
       background: var(--panel-alt);
@@ -219,6 +221,7 @@
       border-radius: 10px;
       padding: 12px;
       user-select: none;
+      -webkit-user-select: none;
     }
 
     .vllo-editor.disabled {
@@ -257,21 +260,21 @@
       background: #090d16;
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 26px 18px 10px;
-      touch-action: pan-x;
+      padding: 30px 24px 12px;
     }
 
     .timeline-canvas {
       position: relative;
-      height: 76px;
+      height: 82px;
       min-width: 100%;
     }
 
     .timeline-ruler {
       position: relative;
-      height: 20px;
+      height: 24px;
       border-bottom: 1px solid #334155;
-      cursor: pointer;
+      cursor: ew-resize;
+      touch-action: none;
     }
 
     .ruler-tick {
@@ -304,12 +307,14 @@
 
     .filmstrip-track {
       position: relative;
-      height: 48px;
+      height: 52px;
       margin-top: 4px;
       background: #111827;
       border-radius: 6px;
       border: 1px solid #334155;
       overflow: visible;
+      touch-action: none;
+      cursor: pointer;
     }
 
     .filmstrip-thumbs {
@@ -350,6 +355,8 @@
       border-bottom: 3px solid var(--warn);
       cursor: grab;
       z-index: 3;
+      touch-action: none;
+      will-change: left, width;
     }
 
     .timeline-range:active {
@@ -358,9 +365,9 @@
 
     .timeline-handle {
       position: absolute;
-      top: -3px;
-      width: 16px;
-      height: calc(100% + 6px);
+      top: -4px;
+      width: 20px;
+      height: calc(100% + 8px);
       background: var(--warn);
       color: #111827;
       cursor: ew-resize;
@@ -370,29 +377,41 @@
       justify-content: center;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.65);
       touch-action: none;
+      will-change: left;
+    }
+
+    .timeline-handle::before {
+      content: "";
+      position: absolute;
+      inset: -6px -10px;
     }
 
     .handle-start {
       transform: translateX(-100%);
-      border-radius: 6px 0 0 6px;
+      border-radius: 7px 0 0 7px;
     }
 
     .handle-end {
       transform: translateX(0);
-      border-radius: 0 6px 6px 0;
+      border-radius: 0 7px 7px 0;
     }
 
     .timeline-handle::after {
       content: "";
       width: 3px;
-      height: 18px;
+      height: 20px;
       border-left: 1.5px solid #1e293b;
       border-right: 1.5px solid #1e293b;
     }
 
+    .timeline-handle:hover,
+    .timeline-handle.dragging {
+      background: #fbbf24;
+    }
+
     .handle-tooltip {
       position: absolute;
-      top: -28px;
+      top: -29px;
       left: 50%;
       transform: translateX(-50%);
       background: #f59e0b;
@@ -415,13 +434,14 @@
 
     .timeline-playhead {
       position: absolute;
-      top: -22px;
-      height: 74px;
+      top: -26px;
+      height: 82px;
       width: 2px;
       background: #ef4444;
       pointer-events: none;
       transform: translateX(-50%);
       z-index: 6;
+      will-change: left;
     }
 
     .timeline-playhead::before {
@@ -430,9 +450,9 @@
       top: 0;
       left: 50%;
       transform: translateX(-50%);
-      border-left: 6px solid transparent;
-      border-right: 6px solid transparent;
-      border-top: 8px solid #ef4444;
+      border-left: 7px solid transparent;
+      border-right: 7px solid transparent;
+      border-top: 9px solid #ef4444;
     }
 
     .jog-grid {
@@ -851,7 +871,7 @@
 
           <div class="timeline-viewport" id="timelineViewport">
             <div class="timeline-canvas" id="timelineCanvas">
-              <div class="timeline-ruler" id="timelineRuler"></div>
+              <div class="timeline-ruler" id="timelineRuler" title="눈금자를 드래그해 재생 위치 이동"></div>
 
               <div class="filmstrip-track" id="filmstripTrack">
                 <div class="filmstrip-thumbs" id="filmstripThumbs"></div>
@@ -938,7 +958,7 @@
         </div>
 
         <div class="hint">
-          • 단축키: <strong>←/→</strong> 1프레임 이동 · <strong>I</strong> 시작점 · <strong>O</strong> 종료점 · <strong>S</strong> 현재 위치에서 구간 분할 · <strong>Shift + 핸들 드래그</strong> 초정밀 조절
+          • 팁: <strong>눈금자 드래그</strong>로 재생 위치 이동, <strong>노란 핸들 드래그</strong>(또는 <strong>I / O</strong> 단축키)로 시작·종료를 부드럽게 맞출 수 있습니다.
         </div>
       </section>
 
@@ -1023,7 +1043,13 @@
     let lastOutputUrl = null;
     let lastOutputBlob = null;
     let lastOutputFilename = 'selected_ranges_merged.mp4';
+
     let dragState = null;
+    let rafPending = false;
+    let lastVideoSeekTs = 0;
+    let pendingSeekTime = null;
+    let scrubTime = null;
+
     let zoomLevel = 1;
     let isClipsCollapsed = false;
     let clipPanelWidth = 320;
@@ -1119,6 +1145,16 @@
       return `${String(m).padStart(2, '0')}:${s}`;
     }
 
+    function requestSmoothVideoSeek(timeSec, immediate = false) {
+      pendingSeekTime = timeSec;
+      const now = performance.now();
+      if (immediate || now - lastVideoSeekTs >= 80) {
+        lastVideoSeekTs = now;
+        el.previewVideo.currentTime = timeSec;
+        pendingSeekTime = null;
+      }
+    }
+
     async function saveResultToChosenLocation() {
       if (!lastOutputBlob) return;
 
@@ -1147,7 +1183,6 @@
         }
       }
 
-      // 미지원 브라우저 폴백: 일반 다운로드 트리거
       el.downloadLink.click();
     }
 
@@ -1157,7 +1192,7 @@
       el.clipsCard.classList.toggle('collapsed', isClipsCollapsed);
       el.toggleClipsBtn.textContent = isClipsCollapsed ? '▶' : '◀ 접기';
       el.collapsedLabel.textContent = `클립 (${clips.length})`;
-      requestAnimationFrame(() => syncTimelineUI());
+      requestAnimationFrame(() => updateTimelinePositions());
     }
 
     function setupClipPanelResizeAndToggle() {
@@ -1185,7 +1220,6 @@
         const rawWidth = wsRect.right - e.clientX;
         clipPanelWidth = Math.min(480, Math.max(190, Math.round(rawWidth)));
         document.documentElement.style.setProperty('--clip-panel-w', `${clipPanelWidth}px`);
-        syncTimelineUI();
       });
 
       window.addEventListener('pointerup', () => {
@@ -1256,7 +1290,7 @@
       const startPlaySegment = () => {
         el.previewVideo.currentTime = range.start;
         el.previewVideo.play().catch(() => {});
-        syncTimelineUI(true);
+        rebuildTimelineStructure(true);
         renderRanges();
       };
 
@@ -1327,7 +1361,7 @@
       clip.activeRangeId = secondPart.id;
 
       appendLog(`[분할] ${clip.name} · ${formatPreciseTime(splitPoint)} 지점에서 구간을 2개로 분할했습니다.`);
-      syncTimelineUI(true);
+      rebuildTimelineStructure(true);
       renderRanges();
       renderClips();
     }
@@ -1378,6 +1412,7 @@
 
       const step = zoomLevel >= 6 ? 0.5 : zoomLevel >= 3 ? 1 : zoomLevel >= 1.5 ? 2 : 5;
       const minorStep = step / 5;
+      const frag = document.createDocumentFragment();
 
       for (let t = 0; t <= duration + 0.001; t += minorStep) {
         const pct = Math.min(100, (t / duration) * 100);
@@ -1386,29 +1421,32 @@
         const tick = document.createElement('div');
         tick.className = `ruler-tick ${isMajor ? 'major' : 'minor'}`;
         tick.style.left = `${pct}%`;
-        el.timelineRuler.appendChild(tick);
+        frag.appendChild(tick);
 
         if (isMajor) {
           const label = document.createElement('div');
           label.className = 'ruler-label';
           label.style.left = `${pct}%`;
           label.textContent = formatPreciseTime(t).slice(0, -1);
-          el.timelineRuler.appendChild(label);
+          frag.appendChild(label);
         }
       }
+      el.timelineRuler.appendChild(frag);
     }
 
     function renderFilmstrip(clip) {
       el.filmstripThumbs.innerHTML = '';
       if (!clip || !clip.thumbs || !clip.thumbs.length) return;
+      const frag = document.createDocumentFragment();
       clip.thumbs.forEach(src => {
         const img = document.createElement('img');
         img.src = src;
-        el.filmstripThumbs.appendChild(img);
+        frag.appendChild(img);
       });
+      el.filmstripThumbs.appendChild(frag);
     }
 
-    function syncTimelineUI(autoScrollToPlayhead = false) {
+    function rebuildTimelineStructure(autoScrollToPlayhead = false) {
       const clip = getSelectedClip();
       const activeRange = getActiveRange(clip);
 
@@ -1439,6 +1477,14 @@
         el.filmstripTrack.appendChild(ghost);
       });
 
+      updateTimelinePositions(autoScrollToPlayhead);
+    }
+
+    function updateTimelinePositions(autoScrollToPlayhead = false) {
+      const clip = getSelectedClip();
+      const activeRange = getActiveRange(clip);
+      if (!clip || clip.duration <= 0 || !activeRange) return;
+
       const startPct = (activeRange.start / clip.duration) * 100;
       const endPct = (activeRange.end / clip.duration) * 100;
 
@@ -1457,10 +1503,10 @@
       el.rangeSummary.textContent = `${startStr} ~ ${endStr}`;
       el.rangeDuration.textContent = `${Math.max(0, activeRange.end - activeRange.start).toFixed(2)}초`;
 
-      const cur = el.previewVideo.currentTime || 0;
-      const playPct = Math.min(100, Math.max(0, (cur / clip.duration) * 100));
+      const displayTime = scrubTime !== null ? scrubTime : (el.previewVideo.currentTime || 0);
+      const playPct = Math.min(100, Math.max(0, (displayTime / clip.duration) * 100));
       el.timelinePlayhead.style.left = `${playPct}%`;
-      el.timecodeHud.textContent = `${formatPreciseTime(cur)} / ${formatPreciseTime(clip.duration)}`;
+      el.timecodeHud.textContent = `${formatPreciseTime(displayTime)} / ${formatPreciseTime(clip.duration)}`;
 
       if (autoScrollToPlayhead && zoomLevel > 1) {
         const canvasW = el.timelineCanvas.offsetWidth;
@@ -1488,7 +1534,7 @@
         el.previewVideo.currentTime = range.end;
       }
 
-      syncTimelineUI(true);
+      updateTimelinePositions(true);
       renderRanges();
       renderClips();
     }
@@ -1499,7 +1545,7 @@
       stopSequencePreview(true);
       const next = Math.max(0, Math.min(clip.duration, (el.previewVideo.currentTime || 0) + delta));
       el.previewVideo.currentTime = Number(next.toFixed(3));
-      syncTimelineUI(true);
+      updateTimelinePositions(true);
     }
 
     function renderRanges() {
@@ -1526,7 +1572,7 @@
         li.onclick = () => {
           clip.activeRangeId = r.id;
           el.previewVideo.currentTime = r.start;
-          syncTimelineUI(true);
+          rebuildTimelineStructure(true);
           renderRanges();
         };
 
@@ -1573,7 +1619,7 @@
           if (clip.activeRangeId === r.id) {
             clip.activeRangeId = clip.ranges[0].id;
           }
-          syncTimelineUI();
+          rebuildTimelineStructure();
           renderRanges();
           renderClips();
         };
@@ -1593,39 +1639,41 @@
         e.preventDefault();
 
         stopSequencePreview(true);
+        if (e.target && e.target.setPointerCapture) {
+          try { e.target.setPointerCapture(e.pointerId); } catch (_) {}
+        }
+
+        const trackRect = el.filmstripTrack.getBoundingClientRect();
         dragState = {
           type,
+          pointerId: e.pointerId,
+          captureEl: e.target,
           startX: e.clientX,
+          trackLeft: trackRect.left,
+          trackWidth: trackRect.width,
           initStart: range.start,
           initEnd: range.end
         };
 
         if (type === 'start') el.handleStart.classList.add('dragging');
         if (type === 'end') el.handleEnd.classList.add('dragging');
+        if (type === 'scrub') {
+          const ratio = Math.min(1, Math.max(0, (e.clientX - trackRect.left) / trackRect.width));
+          scrubTime = Number((ratio * clip.duration).toFixed(3));
+          requestSmoothVideoSeek(scrubTime, true);
+          updateTimelinePositions();
+        }
       };
 
       el.handleStart.addEventListener('pointerdown', e => startDrag('start', e));
       el.handleEnd.addEventListener('pointerdown', e => startDrag('end', e));
       el.timelineRange.addEventListener('pointerdown', e => startDrag('range', e));
-
-      const seekAtClientX = clientX => {
-        const clip = getSelectedClip();
-        if (!clip) return;
-        stopSequencePreview(true);
-        const rect = el.filmstripTrack.getBoundingClientRect();
-        const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-        el.previewVideo.currentTime = Number((ratio * clip.duration).toFixed(3));
-        syncTimelineUI();
-      };
-
-      el.timelineRuler.addEventListener('pointerdown', e => {
-        if (dragState) return;
-        seekAtClientX(e.clientX);
-      });
+      el.timelineRuler.addEventListener('pointerdown', e => startDrag('scrub', e));
 
       el.filmstripTrack.addEventListener('pointerdown', e => {
-        if (dragState) return;
-        seekAtClientX(e.clientX);
+        if (e.target === el.filmstripTrack) {
+          startDrag('scrub', e);
+        }
       });
 
       window.addEventListener('pointermove', e => {
@@ -1634,54 +1682,80 @@
         const range = getActiveRange(clip);
         if (!clip || !range) return;
 
-        const rect = el.filmstripTrack.getBoundingClientRect();
+        const width = Math.max(1, dragState.trackWidth);
         const precisionFactor = e.shiftKey ? 0.2 : 1;
-        const deltaSec = (((e.clientX - dragState.startX) / rect.width) * clip.duration) * precisionFactor;
         const minGap = Math.min(MIN_SEG_SEC, clip.duration);
 
-        if (dragState.type === 'start') {
-          const nextStart = Math.max(0, Math.min(dragState.initStart + deltaSec, range.end - minGap));
-          range.start = Number(nextStart.toFixed(3));
-          el.previewVideo.currentTime = range.start;
-        } else if (dragState.type === 'end') {
-          const nextEnd = Math.min(clip.duration, Math.max(dragState.initEnd + deltaSec, range.start + minGap));
-          range.end = Number(nextEnd.toFixed(3));
-          el.previewVideo.currentTime = range.end;
-        } else if (dragState.type === 'range') {
-          const span = dragState.initEnd - dragState.initStart;
-          let nextStart = dragState.initStart + deltaSec;
-          if (nextStart < 0) nextStart = 0;
-          if (nextStart + span > clip.duration) nextStart = clip.duration - span;
-          range.start = Number(nextStart.toFixed(3));
-          range.end = Number((nextStart + span).toFixed(3));
-          el.previewVideo.currentTime = range.start;
+        if (dragState.type === 'scrub') {
+          const ratio = Math.min(1, Math.max(0, (e.clientX - dragState.trackLeft) / width));
+          scrubTime = Number((ratio * clip.duration).toFixed(3));
+          requestSmoothVideoSeek(scrubTime, false);
+        } else {
+          const deltaSec = (((e.clientX - dragState.startX) / width) * clip.duration) * precisionFactor;
+
+          if (dragState.type === 'start') {
+            const nextStart = Math.max(0, Math.min(dragState.initStart + deltaSec, range.end - minGap));
+            range.start = Number(nextStart.toFixed(3));
+            scrubTime = range.start;
+            requestSmoothVideoSeek(range.start, false);
+          } else if (dragState.type === 'end') {
+            const nextEnd = Math.min(clip.duration, Math.max(dragState.initEnd + deltaSec, range.start + minGap));
+            range.end = Number(nextEnd.toFixed(3));
+            scrubTime = range.end;
+            requestSmoothVideoSeek(range.end, false);
+          } else if (dragState.type === 'range') {
+            const span = dragState.initEnd - dragState.initStart;
+            let nextStart = dragState.initStart + deltaSec;
+            if (nextStart < 0) nextStart = 0;
+            if (nextStart + span > clip.duration) nextStart = clip.duration - span;
+            range.start = Number(nextStart.toFixed(3));
+            range.end = Number((nextStart + span).toFixed(3));
+            scrubTime = range.start;
+            requestSmoothVideoSeek(range.start, false);
+          }
         }
 
-        syncTimelineUI();
-        renderRanges();
+        if (!rafPending) {
+          rafPending = true;
+          requestAnimationFrame(() => {
+            rafPending = false;
+            updateTimelinePositions();
+          });
+        }
       });
 
       window.addEventListener('pointerup', () => {
         if (!dragState) return;
+        if (dragState.captureEl && dragState.captureEl.releasePointerCapture) {
+          try { dragState.captureEl.releasePointerCapture(dragState.pointerId); } catch (_) {}
+        }
         el.handleStart.classList.remove('dragging');
         el.handleEnd.classList.remove('dragging');
+
+        if (pendingSeekTime !== null) {
+          el.previewVideo.currentTime = pendingSeekTime;
+          pendingSeekTime = null;
+        }
+        const wasScrub = dragState.type === 'scrub';
         dragState = null;
-        renderClips();
+        scrubTime = null;
+
+        updateTimelinePositions();
+        if (!wasScrub) {
+          renderRanges();
+          renderClips();
+        }
       });
 
       el.previewVideo.addEventListener('timeupdate', () => {
-        const clip = getSelectedClip();
-        if (!clip || clip.duration <= 0) return;
-        const cur = el.previewVideo.currentTime || 0;
-        const playPct = Math.min(100, Math.max(0, (cur / clip.duration) * 100));
-        el.timelinePlayhead.style.left = `${playPct}%`;
-        el.timecodeHud.textContent = `${formatPreciseTime(cur)} / ${formatPreciseTime(clip.duration)}`;
+        if (dragState) return;
+        updateTimelinePositions();
       });
 
       el.zoomSlider.addEventListener('input', () => {
         zoomLevel = Number(el.zoomSlider.value);
         el.zoomLabel.textContent = `${zoomLevel.toFixed(1)}x`;
-        syncTimelineUI(true);
+        rebuildTimelineStructure(true);
       });
 
       el.timelineViewport.addEventListener('wheel', e => {
@@ -1691,7 +1765,7 @@
         zoomLevel = nextZoom;
         el.zoomSlider.value = zoomLevel;
         el.zoomLabel.textContent = `${zoomLevel.toFixed(1)}x`;
-        syncTimelineUI(true);
+        rebuildTimelineStructure(true);
       }, { passive: false });
 
       document.querySelectorAll('[data-jog]').forEach(btn => {
@@ -1846,7 +1920,7 @@
         el.addRangeBtn.disabled = true;
         el.resetRangeBtn.disabled = true;
         el.filmstripThumbs.innerHTML = '';
-        syncTimelineUI();
+        rebuildTimelineStructure();
         renderRanges();
         renderClips();
         updateButtons();
@@ -1859,7 +1933,7 @@
       el.resetRangeBtn.disabled = false;
 
       renderFilmstrip(clip);
-      syncTimelineUI();
+      rebuildTimelineStructure();
       renderRanges();
       renderClips();
       updateButtons();
@@ -1877,7 +1951,7 @@
       clip.ranges.push(newRange);
       clip.activeRangeId = newRange.id;
 
-      syncTimelineUI(true);
+      rebuildTimelineStructure(true);
       renderRanges();
       renderClips();
     }
@@ -2122,7 +2196,7 @@
       stopSequencePreview(true);
       range.start = 0;
       range.end = clip.duration;
-      syncTimelineUI();
+      updateTimelinePositions();
       renderRanges();
       renderClips();
     };
@@ -2134,7 +2208,7 @@
       stopSequencePreview(true);
       const cur = Number((el.previewVideo.currentTime || 0).toFixed(3));
       range.start = Math.min(cur, Math.max(0, range.end - MIN_SEG_SEC));
-      syncTimelineUI();
+      updateTimelinePositions();
       renderRanges();
       renderClips();
     };
@@ -2146,7 +2220,7 @@
       stopSequencePreview(true);
       const cur = Number((el.previewVideo.currentTime || 0).toFixed(3));
       range.end = Math.max(cur, Math.min(clip.duration, range.start + MIN_SEG_SEC));
-      syncTimelineUI();
+      updateTimelinePositions();
       renderRanges();
       renderClips();
     };
