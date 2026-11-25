@@ -213,7 +213,6 @@
       display: flex;
     }
 
-    /* ===== 부드러운 60fps VLLO 타임라인 ===== */
     .vllo-editor {
       margin-top: 12px;
       background: var(--panel-alt);
@@ -625,7 +624,7 @@
       border: 1px solid var(--border);
       border-radius: 6px;
       padding: 7px 10px;
-      font-size: 0.88rem;
+      font-size: 0.86rem;
     }
 
     button {
@@ -834,7 +833,7 @@
     <header>
       <div>
         <h1>🎬 MP4 Studio Lite</h1>
-        <div class="hint">VLLO 스타일 확대 필름스트립 타임라인 · 구간 분할(Split) · 연속 미리보기 · 저장 위치 지정</div>
+        <div class="hint">VLLO 스타일 확대 필름스트립 타임라인 · 구간 분할(Split) · 연속 미리보기 · 고속 병합</div>
       </div>
       <span class="badge" id="engineStatus">FFmpeg 엔진 대기 중</span>
     </header>
@@ -958,7 +957,7 @@
         </div>
 
         <div class="hint">
-          • 팁: <strong>눈금자 드래그</strong>로 재생 위치 이동, <strong>노란 핸들 드래그</strong>(또는 <strong>I / O</strong> 단축키)로 시작·종료를 부드럽게 맞출 수 있습니다.
+          • 2개 이상의 클립을 추가한 뒤 각 클립의 원하는 구간에 <strong>체크(✔)</strong>를 표시하고, 하단 <strong>전체 클립의 체크 구간 합치기</strong>를 누르면 목록 순서대로 하나의 MP4로 합쳐집니다.
         </div>
       </section>
 
@@ -982,7 +981,7 @@
 
           <div class="dropzone" id="dropzone">
             <strong>MP4 추가</strong>
-            <div style="font-size:0.76rem; margin-top:4px;">클릭 또는 파일 드래그</div>
+            <div style="font-size:0.76rem; margin-top:4px;">클릭 또는 파일 드래그 (여러 개 선택 가능)</div>
             <input type="file" id="fileInput" accept="video/mp4,.mp4" multiple hidden />
           </div>
 
@@ -996,9 +995,16 @@
       <div class="export-bar">
         <div class="mode-group">
           <label for="encodeMode" style="font-size:0.88rem; color:var(--muted);">처리 방식:</label>
-          <select id="encodeMode" style="width:auto; min-width:290px;">
-            <option value="reencode" selected>정밀 프레임 컷 + 재인코딩 (H.264/AAC, 정확한 컷 권장)</option>
-            <option value="copy">빠른 무손실 복사 (-c copy, 키프레임 단위 근사 컷)</option>
+          <select id="encodeMode">
+            <option value="copy" selected>빠른 무손실 복사 (-c copy, 태블릿/모바일 권장)</option>
+            <option value="reencode">고속 정밀 프레임 컷 (ultrafast + 최대 1080p)</option>
+          </select>
+
+          <label for="maxRes" style="font-size:0.88rem; color:var(--muted);">최대 해상도:</label>
+          <select id="maxRes">
+            <option value="1080" selected>최대 1080p (속도·화질 균형)</option>
+            <option value="720">최대 720p (초고속)</option>
+            <option value="original">원본 유지 (4K 등 고해상도 느림)</option>
           </select>
         </div>
 
@@ -1010,12 +1016,12 @@
 
       <div class="progress-wrap">
         <progress id="progressBar" value="0" max="100"></progress>
-        <div class="log-box" id="logBox">준비 완료. MP4 파일을 추가하고 VLLO 타임라인에서 구간을 정밀하게 잡아보세요.</div>
+        <div class="log-box" id="logBox">준비 완료. MP4 파일 2개 이상을 추가하고 ▲/▼ 버튼으로 병합 순서를 정한 뒤 합치기를 눌러보세요.</div>
       </div>
 
       <div class="result-box" id="resultBox">
         <div>
-          <strong style="color:#6ee7b7;">✔ 선택 구간 병합이 완료되었습니다!</strong>
+          <strong style="color:#6ee7b7;">✔ 클립/구간 병합이 완료되었습니다!</strong>
           <div id="resultInfo" style="font-size:0.82rem; color:var(--muted);"></div>
         </div>
         <div class="result-actions">
@@ -1115,6 +1121,7 @@
       resetRangeBtn: document.getElementById('resetRangeBtn'),
       rangeList: document.getElementById('rangeList'),
       encodeMode: document.getElementById('encodeMode'),
+      maxRes: document.getElementById('maxRes'),
       exportClipRangesBtn: document.getElementById('exportClipRangesBtn'),
       exportAllRangesBtn: document.getElementById('exportAllRangesBtn'),
       progressBar: document.getElementById('progressBar'),
@@ -1366,7 +1373,7 @@
       renderClips();
     }
 
-    async function extractThumbnails(file, duration, count = 16) {
+    async function extractThumbnails(file, duration, count = 14) {
       const thumbs = [];
       if (!duration || duration <= 0) return thumbs;
 
@@ -1887,7 +1894,7 @@
           clips.push(newClip);
           if (!selectedClipId) selectedClipId = newClip.id;
 
-          extractThumbnails(file, meta.duration, 18).then(thumbs => {
+          extractThumbnails(file, meta.duration, 14).then(thumbs => {
             newClip.thumbs = thumbs;
             if (selectedClipId === newClip.id) renderFilmstrip(newClip);
           });
@@ -2036,22 +2043,38 @@
       if (!busy) updateButtons();
     }
 
+    function computeTargetSize(width, height, capLongSide) {
+      let w = width % 2 === 0 ? width : width - 1;
+      let h = height % 2 === 0 ? height : height - 1;
+      if (!capLongSide || capLongSide === 'original') {
+        return { w: Math.max(2, w), h: Math.max(2, h) };
+      }
+      const maxDim = Number(capLongSide);
+      const longSide = Math.max(w, h);
+      if (longSide > maxDim) {
+        const scale = maxDim / longSide;
+        w = Math.max(2, Math.round((w * scale) / 2) * 2);
+        h = Math.max(2, Math.round((h * scale) / 2) * 2);
+      }
+      return { w, h };
+    }
+
     async function processTasks(tasks, outputFilename) {
       if (!tasks.length) return;
       stopSequencePreview(true);
       setBusy(true);
       el.resultBox.classList.remove('show');
       el.progressBar.value = 0;
-      setLog(`[작업 시작] 총 ${tasks.length}개 체크된 구간을 추출해 하나로 합칩니다...`);
+      setLog(`[작업 시작] 총 ${tasks.length}개 체크된 구간을 목록 순서대로 합칩니다...`);
 
       try {
         await ensureFFmpeg();
         const mode = el.encodeMode.value;
+        const capRes = el.maxRes.value;
         const segmentNames = [];
 
         const firstClip = tasks[0].clip;
-        const baseW = firstClip.width % 2 === 0 ? firstClip.width : firstClip.width - 1;
-        const baseH = firstClip.height % 2 === 0 ? firstClip.height : firstClip.height - 1;
+        const { w: baseW, h: baseH } = computeTargetSize(firstClip.width, firstClip.height, capRes);
 
         const writtenInputs = new Map();
 
@@ -2079,15 +2102,15 @@
               segName
             ]);
           } else {
-            const vf = `scale=${baseW}:${baseH}:force_original_aspect_ratio=decrease,pad=${baseW}:${baseH}:(ow-iw)/2:(oh-ih)/2,fps=30,format=yuv420p`;
+            const vf = `scale=${baseW}:${baseH}:force_original_aspect_ratio=decrease,pad=${baseW}:${baseH}:(ow-iw)/2:(oh-ih)/2,format=yuv420p`;
             await ffmpeg.exec([
               '-ss', String(range.start),
               '-i', inName,
               '-t', String(duration),
               '-vf', vf,
               '-c:v', 'libx264',
-              '-preset', 'veryfast',
-              '-crf', '22',
+              '-preset', 'ultrafast',
+              '-crf', '24',
               '-c:a', 'aac',
               '-ar', '44100',
               '-ac', '2',
@@ -2135,10 +2158,10 @@
         }
 
         el.progressBar.value = 100;
-        appendLog('\n[완료] 선택 구간 병합 파일이 생성되었습니다. "저장 위치 지정 저장" 버튼으로 원하는 폴더에 저장하세요.');
+        appendLog('\n[완료] 병합 파일이 생성되었습니다. 저장 버튼으로 내려받으세요.');
       } catch (err) {
         console.error(err);
-        el.engineStatus.textContent = 'FFmpeg 초기화 오류';
+        el.engineStatus.textContent = 'FFmpeg 처리 오류';
         const detail = err?.stack || err?.message || String(err);
         appendLog(`\n[오류 발생] ${detail}`);
         alert(`영상 처리 중 오류가 발생했습니다: ${err?.message || err}`);
